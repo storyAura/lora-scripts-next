@@ -149,6 +149,45 @@ class TimestepEmbeddingDtypeTests(unittest.TestCase):
         self.assertEqual(emb.dtype, torch.bfloat16)
 
 
+class TrainNormAffineFreeTests(unittest.TestCase):
+    """train_norm must skip affine-free norms instead of crashing at forward.
+
+    Regression: Anima's DiT LayerNorms are all `elementwise_affine=False`, so their
+    `weight` is None. LyCORIS NormModule wrapped them anyway and blew up on the
+    first forward with `'NoneType' object has no attribute 'to'` (make_weight).
+    With train_norm=True this built ~295 landmine modules per run.
+    """
+
+    def test_affine_free_layernorm_is_skipped_and_passthrough(self):
+        from lycoris.modules.norms import NormModule
+
+        norm = torch.nn.LayerNorm(16, elementwise_affine=False, eps=1e-6)
+        module = NormModule("test_norm", norm, 1.0)
+        self.assertTrue(module.not_supported, "affine-free norms must be marked unsupported")
+
+        x = torch.randn(2, 16)
+        out = module(x)  # must not raise
+        self.assertTrue(torch.allclose(out, norm(x)), "unsupported norms must pass through")
+
+    def test_affine_layernorm_still_trainable(self):
+        from lycoris.modules.norms import NormModule
+
+        norm = torch.nn.LayerNorm(16, elementwise_affine=True)
+        module = NormModule("test_norm", norm, 1.0)
+        self.assertFalse(module.not_supported)
+        self.assertTrue(hasattr(module, "w_norm"))
+        self.assertEqual(tuple(module(torch.randn(2, 16)).shape), (2, 16))
+
+    def test_affine_norm_without_bias_does_not_touch_missing_b_norm(self):
+        from lycoris.modules.norms import NormModule
+
+        norm = torch.nn.LayerNorm(16, elementwise_affine=True, bias=False)
+        module = NormModule("test_norm", norm, 1.0)
+        self.assertFalse(module.not_supported)
+        self.assertFalse(hasattr(module, "b_norm"), "no bias => no b_norm parameter")
+        self.assertEqual(tuple(module(torch.randn(2, 16)).shape), (2, 16))
+
+
 class RotaryEmbeddingShortcutTests(unittest.TestCase):
     def test_full_rot_dim_matches_manual_rotation(self):
         # Anima's config has rot_dim == head_dim, so t_pass is empty and the cat is skipped.
