@@ -306,6 +306,103 @@ class AnimaBackendAdapterTests(unittest.TestCase):
         self.assertEqual(adapted["text_encoder_lr"], "1e-5")
         self.assertEqual(warnings, [])
 
+    @staticmethod
+    def _arg_value(network_args, key):
+        found = None
+        for item in network_args:
+            k, v = item.split("=", 1)
+            if k == key:
+                found = v
+        return found
+
+    def test_glokr_ui_fields_become_network_args(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glokr",
+                "kron_rank": 2,
+                "use_bora": True,
+                "bora_iters": 2,
+                "train_gates": True,
+                "init_mode": "nkp",
+                "use_g_out": False,
+                "g_norm_mode": "frobenius",
+                "lokr_factor": -1,
+            }
+        )
+        args = adapted["network_args"]
+
+        self.assertEqual(self._arg_value(args, "algo"), "glokr")
+        self.assertEqual(self._arg_value(args, "kron_rank"), "2")
+        self.assertEqual(self._arg_value(args, "use_bora"), "True")
+        self.assertEqual(self._arg_value(args, "bora_iters"), "2")
+        self.assertEqual(self._arg_value(args, "train_gates"), "True")
+        self.assertEqual(self._arg_value(args, "init_mode"), "nkp")
+        self.assertEqual(self._arg_value(args, "g_norm_mode"), "frobenius")
+        self.assertEqual(self._arg_value(args, "factor"), "-1")
+        # False must be omitted so the lycoris-side default (False) applies.
+        self.assertIsNone(self._arg_value(args, "use_g_out"))
+        self.assertNotIn("kron_rank", adapted)
+
+    def test_gsokr_and_boft_ui_fields_become_network_args(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "gsokr",
+                "use_sora": True,
+                "sora_r": 4,
+                "sora_epsilon": 0.00001,
+            }
+        )
+        args = adapted["network_args"]
+        self.assertEqual(self._arg_value(args, "use_sora"), "True")
+        self.assertEqual(self._arg_value(args, "sora_r"), "4")
+        self.assertEqual(float(self._arg_value(args, "sora_epsilon")), 0.00001)
+
+        adapted, _ = adapt_anima_config(
+            {
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glora_boft",
+                "boft_constraint": 0,
+                "boft_rescaled": False,
+            }
+        )
+        args = adapted["network_args"]
+        self.assertEqual(self._arg_value(args, "constraint"), "0")
+        self.assertIsNone(self._arg_value(args, "rescaled"))
+        self.assertIsNone(self._arg_value(args, "boft_constraint"))
+        self.assertNotIn("boft_constraint", adapted)
+        self.assertNotIn("boft_rescaled", adapted)
+
+    def test_ui_field_overrides_custom_network_args_duplicate(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glokr",
+                "kron_rank": 2,
+                "network_args_custom": ["kron_rank=4", "wd_on_output=False"],
+            }
+        )
+        args = adapted["network_args"]
+        kron_values = [a.split("=", 1)[1] for a in args if a.startswith("kron_rank=")]
+        self.assertEqual(kron_values[-1], "2")
+        self.assertEqual(self._arg_value(args, "wd_on_output"), "False")
+
+    def test_finetune_strips_extension_algo_fields(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "kron_rank": 2,
+                "use_sora": True,
+                "boft_constraint": 0,
+            },
+            finetune=True,
+        )
+        self.assertNotIn("kron_rank", adapted)
+        self.assertNotIn("use_sora", adapted)
+        self.assertNotIn("boft_constraint", adapted)
+        self.assertNotIn("network_args", adapted)
+
 
 if __name__ == "__main__":
     unittest.main()

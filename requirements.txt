@@ -41,6 +41,8 @@ wandb==0.16.2
 httpx==0.24.1
 # extra
 open-clip-torch==2.20.0
+# NOTE: venv 内的 lycoris 已被本地魔改版覆盖（含 glokr/bokr/bora/gsokr/glora_boft，源自 D:\桌面\lycoris）。
+# 请勿对 lycoris-lora 执行强制重装（--force-reinstall / -I），否则会退回官方版丢失新算法。
 lycoris-lora==3.3.0
 dadaptation==3.1
 # tagger (WD14 etc.) — required by dataset tagging; NVIDIA portable build uses GPU build

@@ -46,7 +46,7 @@
         LYCORIS_MAIN: Schema.union([
             Schema.object({
                 network_module: Schema.const('lycoris.kohya').required(),
-                lycoris_algo: Schema.union(["locon", "loha", "lokr", "ia3", "dylora", "glora", "diag-oft", "boft"]).default("locon").description('LyCORIS 网络算法'),
+                lycoris_algo: Schema.union(["locon", "loha", "lokr", "ia3", "dylora", "glora", "diag-oft", "boft", "glokr", "bokr", "bora", "gsokr", "glora_boft"]).default("locon").description('LyCORIS 网络算法。glokr/bokr/bora/gsokr/glora_boft 为本地扩展算法：仅作用于 Linear 层（适合 DiT 类模型，Conv 层自动跳过），glokr 详见 lycoris 包内 GLOKR.md'),
                 conv_dim: Schema.number().default(4),
                 conv_alpha: Schema.number().default(1),
                 dropout: Schema.number().step(0.01).default(0).description('dropout 概率。推荐 0~0.5，LoHa/LoKr/(IA)^3暂不支持'),

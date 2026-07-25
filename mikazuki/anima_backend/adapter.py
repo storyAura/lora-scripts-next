@@ -144,6 +144,18 @@ NETWORK_ONLY_FIELDS = {
     "enable_base_weight",
     "base_weights",
     "base_weights_multiplier",
+    "kron_rank",
+    "use_bora",
+    "bora_iters",
+    "train_gates",
+    "init_mode",
+    "use_g_out",
+    "g_norm_mode",
+    "use_sora",
+    "sora_r",
+    "sora_epsilon",
+    "boft_constraint",
+    "boft_rescaled",
 }
 
 UI_ONLY_FIELDS = {
@@ -162,6 +174,7 @@ UI_ONLY_FIELDS = {
     "prompt_file",
     "enable_debug_options",
     "json_caption_hint",
+    "lycoris_ext_hint",
     "lora_type",
 }
 
@@ -191,6 +204,21 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     "rank_dropout_scale": "rank_dropout_scale",
     "train_norm": "train_norm",
     "dropout": "dropout",
+    # 本地扩展算法专属字段（glokr / gsokr / glora_boft）。
+    # 布尔字段的 UI 默认值只允许 lycoris 侧默认为 False 的参数设为 true，
+    # 因为 _is_empty_value 会把 False 丢弃（不发送 = lycoris 默认值）。
+    "kron_rank": "kron_rank",
+    "use_bora": "use_bora",
+    "bora_iters": "bora_iters",
+    "train_gates": "train_gates",
+    "init_mode": "init_mode",
+    "use_g_out": "use_g_out",
+    "g_norm_mode": "g_norm_mode",
+    "use_sora": "use_sora",
+    "sora_r": "sora_r",
+    "sora_epsilon": "sora_epsilon",
+    "boft_constraint": "constraint",
+    "boft_rescaled": "rescaled",
 }
 
 LOKR_TRAIN_NORM_WARNING = (
