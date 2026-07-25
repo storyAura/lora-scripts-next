@@ -609,6 +609,16 @@ class TimestepEmbedding(nn.Module):
         torch.nn.init.trunc_normal_(self.linear_2.weight, std=std, a=-3 * std, b=3 * std)
 
     def forward(self, sample: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # Callers may pass fp32 timesteps while the model itself runs in bf16/fp16
+        # (the trainer keeps timesteps unquantized so the conditioning matches the
+        # fp32 sigmas). Align with the projection weights up front: this Linear may
+        # run outside autocast, and with use_adaln_lora the raw features are handed
+        # to the AdaLN modulation, which the blocks call with autocast *disabled* on
+        # the bf16 path — a dtype mismatch there raises
+        # "expected mat1 and mat2 to have the same dtype".
+        # Timesteps.forward already computes the sinusoids from the exact fp32 value.
+        sample = sample.to(self.linear_1.weight.dtype)
+
         emb = self.linear_1(sample)
         emb = self.activation(emb)
         emb = self.linear_2(emb)

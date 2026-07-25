@@ -107,6 +107,48 @@ class HuberScheduleGuardTests(unittest.TestCase):
         self.assertEqual(args.discrete_flow_shift, 3.0)
 
 
+class TimestepEmbeddingDtypeTests(unittest.TestCase):
+    """fp32 timesteps must not poison the AdaLN path of a bf16 model.
+
+    Regression: TimestepEmbedding returned the raw sinusoidal features
+    (`emb_B_T_D = sample`) with the caller's dtype. Blocks consume that inside
+    `torch.autocast(..., enabled=use_fp32)`, which DISABLES autocast on the bf16
+    path, so an fp32 tensor met bf16 weights and training/sampling crashed with
+    "expected mat1 and mat2 to have the same dtype".
+    """
+
+    def _run(self, t_dtype, weight_dtype):
+        from library import anima_models
+
+        torch.manual_seed(0)
+        embedder = torch.nn.Sequential(
+            anima_models.Timesteps(32),
+            anima_models.TimestepEmbedding(32, 32, use_adaln_lora=True),
+        ).to(weight_dtype)
+        timesteps = torch.tensor([[0.5]], dtype=t_dtype)
+        return embedder(timesteps)
+
+    def test_fp32_timestep_yields_weight_dtype_embedding(self):
+        emb, adaln = self._run(torch.float32, torch.bfloat16)
+        self.assertEqual(emb.dtype, torch.bfloat16, "emb must follow the projection dtype")
+        self.assertEqual(adaln.dtype, torch.bfloat16)
+
+    def test_adaln_linear_accepts_the_embedding_without_autocast(self):
+        # This is the exact call that crashed: Block._forward runs the AdaLN
+        # modulation with autocast disabled on the bf16 path.
+        emb, _ = self._run(torch.float32, torch.bfloat16)
+        adaln_modulation = torch.nn.Sequential(
+            torch.nn.SiLU(), torch.nn.Linear(32, 96, bias=False)
+        ).to(torch.bfloat16)
+        with torch.autocast(device_type="cpu", dtype=torch.float32, enabled=False):
+            out = adaln_modulation(emb)  # must not raise
+        self.assertEqual(out.dtype, torch.bfloat16)
+
+    def test_bf16_timestep_still_works(self):
+        emb, _ = self._run(torch.bfloat16, torch.bfloat16)
+        self.assertEqual(emb.dtype, torch.bfloat16)
+
+
 class RotaryEmbeddingShortcutTests(unittest.TestCase):
     def test_full_rot_dim_matches_manual_rotation(self):
         # Anima's config has rot_dim == head_dim, so t_pass is empty and the cat is skipped.

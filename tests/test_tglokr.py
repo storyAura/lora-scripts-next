@@ -262,6 +262,56 @@ class TGLoKRLoraTypeBranchTests(unittest.TestCase):
         self.assertEqual(imported_plain.get("lora_type"), "glokr")
 
 
+class Bf16EndToEndTests(unittest.TestCase):
+    """A bf16 model with T-GLoKR must survive an fp32 timestep.
+
+    Regression: the time-gate buffer was cast to bf16 along with the module, while
+    the gate weights were explicitly .float() -> torch.dot raised on mixed dtypes.
+    All other tglokr tests run in fp32, so only a bf16 end-to-end pass catches it.
+    """
+
+    def test_bf16_block_with_time_gates_and_fp32_timestep(self):
+        from library import anima_models, attention
+        from lycoris.kohya import create_network
+
+        dt = torch.bfloat16
+        torch.manual_seed(0)
+        t_embedder = torch.nn.Sequential(
+            anima_models.Timesteps(64),
+            anima_models.TimestepEmbedding(64, 64, use_adaln_lora=True),
+        ).to(dt)
+        block = anima_models.Block(x_dim=64, context_dim=64, num_heads=4, use_adaln_lora=True).to(dt)
+
+        dit = nn.Module()
+        dit.blocks = nn.ModuleList([block])
+        net = create_network(
+            1.0, 8, 8, None, nn.Module(), dit, warn_on_unmatched=False,
+            algo="glokr", factor="-1", kron_rank="2", train_gates="True",
+            init_mode="nkp", train_time_gates="True", time_gate_dim="4",
+        )
+        net.apply_to(nn.Module(), dit, False, True)
+        net.to(dt)
+        self.assertTrue(net.unet_loras, "adapter should attach to the block")
+
+        x = torch.randn(1, 1, 2, 2, 64, dtype=dt)
+        ctx = torch.randn(1, 4, 64, dtype=dt)
+        attn_params = attention.AttentionParams.create_attention_params("torch", False)
+
+        for timesteps in (torch.tensor([[0.5]], dtype=torch.float32), torch.tensor([[0.5]], dtype=dt)):
+            net.set_current_timestep(timesteps)
+            emb, adaln = t_embedder(timesteps)
+            self.assertEqual(emb.dtype, dt)
+            # blocks run the AdaLN modulation with autocast disabled on the bf16 path
+            with torch.autocast(device_type="cpu", dtype=torch.float32, enabled=False):
+                out = block(x, emb, ctx, attn_params, False, adaln_lora_B_T_3D=adaln)
+            self.assertEqual(out.dtype, dt)
+            net.clear_current_timestep()
+
+    def test_time_gate_freqs_not_persisted_in_state_dict(self):
+        net, _ = _build_glokr({"train_time_gates": "True"})
+        self.assertNotIn("time_gate_freqs", net.unet_loras[0].custom_state_dict())
+
+
 class StaleAutosaveTests(unittest.TestCase):
     """A stale train_time_gates value in the browser autosave must never break submit.
 

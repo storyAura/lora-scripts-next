@@ -361,7 +361,9 @@ def do_sample(
 
     for i in tqdm(range(steps), desc="Sampling"):
         sigma = sigmas[i]
-        t = sigma.unsqueeze(0)  # (1,)
+        # Schedule/Euler math stays fp32 (see sigmas above); the model gets the
+        # timestep in its own dtype, matching how it is called during training.
+        t = sigma.unsqueeze(0).to(dtype)  # (1,)
 
         if use_cfg:
             # CFG: two separate passes to reduce memory usage
