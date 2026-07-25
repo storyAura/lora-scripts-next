@@ -1,0 +1,1 @@
+const e=JSON.parse('{"key":"v-help-tparams","path":"/help/training-params.html","title":"训练参数说明","lang":"zh-CN","frontmatter":{"type":"iframe","subtype":"/help/training-params.html"},"excerpt":"","headers":[],"filePathRelative":"help/training-params.md"}');export{e as data};

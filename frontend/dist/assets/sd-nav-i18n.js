@@ -317,34 +317,9 @@
     othersGroup.appendChild(li);
   }
 
-  function ensureAlgorithmHelpLink() {
-    const sidebar = document.querySelector(".sidebar .sidebar-items");
-    if (!sidebar) return;
-    if (sidebar.querySelector('a[href="/help/algorithms.html"]')) return;
-
-    let helpGroup = null;
-    sidebar.querySelectorAll("li").forEach((li) => {
-      if (helpGroup) return;
-      const heading = li.querySelector(":scope > p.sidebar-item.sidebar-heading");
-      if (!heading) return;
-      const text = normalize(heading.textContent);
-      if (text === "帮助" || text === "Help") {
-        helpGroup = li.querySelector(":scope > ul.sidebar-item-children");
-      }
-    });
-    if (!helpGroup) return;
-
-    const li = document.createElement("li");
-    const a = document.createElement("a");
-    a.href = "/help/algorithms.html";
-    a.className = "sidebar-item";
-    a.setAttribute("aria-label", "训练算法说明");
-    a.appendChild(document.createTextNode(" 训练算法说明 "));
-    li.appendChild(a);
-    helpGroup.appendChild(li);
-  }
-
   // 旧「训练参数说明」为编译期 VuePress 页面（SD1.5 时代内容），已由静态新页替代。
+  // 「训练参数说明」「训练算法说明」的站内路由在 app.js 中注册（v-help-tparams /
+  // v-help-algos，iframe 型页面），侧边栏条目由 themeConfig 提供，此处只兜旧入口。
   // 点击劫持 + 直访重定向双保险，无需改动编译产物中的旧页面 chunk。
   const LEGACY_PARAMS_PATHS = ["/lora/params.html", "/lora/params.md"];
   const NEW_PARAMS_PATH = "/help/training-params.html";
@@ -953,7 +928,6 @@
     const map = english ? ZH_TO_EN : EN_TO_ZH;
     ensureSidebarTerminalLink();
     ensureTagEditorLinks();
-    ensureAlgorithmHelpLink();
     const sidebar = document.querySelector(".sidebar .sidebar-items");
     if (sidebar) replaceInElement(sidebar, map);
 
