@@ -4,6 +4,7 @@
 $Env:HF_HOME = "huggingface"
 $Env:PYTHONUTF8 = "1"
 $Env:MIKAZUKI_PORT = "28000"
+$Env:MIKAZUKI_SCHEMA_HOT_RELOAD = "1"
 
 if (Test-Path -Path "venv\Scripts\activate") {
     Write-Host -ForegroundColor green "Activating virtual environment..."

@@ -5,6 +5,7 @@ cd /d "%~dp0"
 set "HF_HOME=huggingface"
 set "PYTHONUTF8=1"
 set "MIKAZUKI_PORT=28000"
+set "MIKAZUKI_SCHEMA_HOT_RELOAD=1"
 
 :: Source/venv launcher. Portable packages use run_gui_portable.bat instead.
 
