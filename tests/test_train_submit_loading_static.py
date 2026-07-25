@@ -14,11 +14,21 @@ class TrainSubmitLoadingStaticTests(unittest.TestCase):
         self.assertIn("setSubmitButtonLoading=", layout)
         self.assertIn("trainSubmitButton", layout)
         self.assertIn("if(submitLoading.value)return", layout)
-        self.assertIn("submitLoading=ref(!1),submitNotice=null", layout)
+        # submitNotice must be a mutable holder, never a plain `const` binding that
+        # gets reassigned: `submitNotice=ElMessage(...)` sits *before* the try block,
+        # so "Assignment to constant variable" aborted submit before the request was
+        # ever sent, left the永不消失 toast open and pinned submitLoading at true
+        # (every later click hit the `if(submitLoading.value)return` guard).
         self.assertIn(
-            "submitLoading.value=!0,setSubmitButtonLoading(!0),submitNotice=ElMessage(",
+            "submitLoading=ref(!1),submitNotice={t:null,close(){this.t&&this.t.close(),this.t=null}}",
             layout,
         )
+        self.assertIn(
+            "submitLoading.value=!0,setSubmitButtonLoading(!0),submitNotice.t=ElMessage(",
+            layout,
+        )
+        self.assertNotIn("submitNotice=null", layout)
+        self.assertNotIn("submitNotice=ElMessage(", layout)
         self.assertNotIn("const submitNotice=ElMessage(", layout)
         self.assertIn("任务正在提交中，请稍等", layout)
         self.assertIn('duration:0,type:"info"', layout)
