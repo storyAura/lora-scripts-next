@@ -80,6 +80,32 @@ mapping — for LyCORIS algos that is `LYCORIS_NETWORK_ARG_MAP` in
 `mikazuki/anima_backend/adapter.py`, whose reverse table lives in
 `mikazuki/utils/config_import.py` (keep them symmetric; `tests/test_tglokr.py` asserts this).
 
+### Editing schemas: three caches stand between you and the UI
+
+1. `mikazuki/schema/*.ts` on disk.
+2. **Backend memory** — `load_schemas()` reads the directory *once at startup*. Set
+   `MIKAZUKI_SCHEMA_HOT_RELOAD=1` to re-read on every `/api/schemas/hashes` hit;
+   `run_gui_source.bat`/`.ps1` already export it, `run_gui.bat` does not.
+3. **Browser `localStorage["schemas"]`** — refreshed only when the served hash differs.
+
+To tell layer 2 from layer 3 apart, compare the file's md5 against `GET /api/schemas/hashes`:
+equal means the backend is current and the stale copy is in the browser (hard-reload).
+
+Each schema is a `Schema.union([...])` discriminated by `lora_type`, every branch being a
+`Schema.object` keyed `lora_type: Schema.const("<name>").required()`. **Do not use
+`Schema.const()` for any other field in a branch.** The browser autosaves raw, unvalidated form
+values, so a leftover value from another branch makes the union match nothing and the submit
+handler throws *before* any request is sent — which surfaces as a misleading "network error".
+Prefer a tolerant type plus a server-side override derived from `lora_type` in the adapter.
+
+### Verifying a training change
+
+Submit through the real path — `POST /api/run` with the flat config as JSON — instead of
+invoking a trainer script by hand. `create_toml_file()` also writes the sample-prompts file
+(`get_sample_prompts`) and applies per-type defaults; bypassing it produces failures that do not
+exist in the product. Watch progress over `GET /api/train/log/stream/{task_id}` and stop with
+`GET /api/tasks/terminate/{task_id}`.
+
 ### Training type routing
 
 `trainer_mapping` in `mikazuki/app/api.py` maps `model_train_type` → trainer script.
@@ -156,3 +182,10 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 - GLoKR/T-GLoKR default to merged mode, which reconstructs the full ΔW per module per step —
   heavy on VRAM. `bypass_mode=True` avoids it but is mutually exclusive with
   `use_bora`/`dora_wd`. `vendor/lycoris/GLOKR.md` has the full parameter reference.
+- For LoKr-family algos `network_dim` is only a threshold ("stop decomposing the Kronecker
+  factors"), not a capacity dial — huge values are idiomatic. Capacity comes from `factor`
+  (`-1` = balanced = *fewest* parameters; smaller values inflate them quadratically) and, for
+  GLoKR, from `kron_rank` (linear).
+- On Windows an over-committed allocation does not raise: it silently spills into shared system
+  memory and training keeps "running" at a crawl. GPU **power draw** tells the two apart —
+  near the limit means real compute, roughly half means it is stalled on memory transfers.
