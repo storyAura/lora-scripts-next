@@ -387,6 +387,15 @@ def adapt_anima_config(
     # passes network_args items (as **kwargs) to lycoris.kohya.create_network();
     # top-level TOML keys like use_cp, decompose_both, etc. are silently lost.
     if not finetune and source.get("network_module") == "lycoris.kohya":
+        # T-GLoKR is the tglokr UI branch of algo=glokr; the time-gate flag is what
+        # separates them. Derive it from lora_type so a stale value carried over from
+        # another branch (browser autosave) can never silently flip the algorithm.
+        lora_type = str(source.get("lora_type") or "").strip().lower()
+        if lora_type == "tglokr":
+            source["train_time_gates"] = True
+        elif lora_type:
+            source.pop("train_time_gates", None)
+
         network_args = list(source.get("network_args") or [])
         for ui_field, arg_key in LYCORIS_NETWORK_ARG_MAP.items():
             value = source.pop(ui_field, None)

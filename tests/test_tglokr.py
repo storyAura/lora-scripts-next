@@ -262,6 +262,41 @@ class TGLoKRLoraTypeBranchTests(unittest.TestCase):
         self.assertEqual(imported_plain.get("lora_type"), "glokr")
 
 
+class StaleAutosaveTests(unittest.TestCase):
+    """A stale train_time_gates value in the browser autosave must never break submit.
+
+    Regression: the tglokr branch declared train_time_gates as Schema.const(true).
+    Browsers keep a raw (unvalidated) autosave of the form, so a leftover `false`
+    from the earlier build made the whole union fail to match -> the schema threw
+    inside the submit handler -> the request was never sent and the UI reported a
+    misleading "network error".
+    """
+
+    def test_schema_uses_tolerant_boolean_not_const(self):
+        schema = (PROJECT_ROOT / "mikazuki" / "schema" / "sd3-lora.ts").read_text(encoding="utf-8")
+        tglokr_branch = schema.split('lora_type: Schema.const("tglokr").required()', 1)[1][:900]
+        self.assertIn("train_time_gates: Schema.boolean()", tglokr_branch)
+        self.assertNotIn("train_time_gates: Schema.const", tglokr_branch)
+
+    def test_adapter_forces_flag_from_lora_type(self):
+        base = {
+            "pretrained_model_name_or_path": "x.safetensors",
+            "network_module": "lycoris.kohya",
+            "lycoris_algo": "glokr",
+        }
+
+        def gates_of(cfg):
+            adapted, _ = adapt_anima_config(cfg)
+            args = {i.split("=", 1)[0]: i.split("=", 1)[1] for i in adapted.get("network_args", [])}
+            return args.get("train_time_gates")
+
+        # stale False must not silently disable T-GLoKR
+        self.assertEqual(gates_of({**base, "lora_type": "tglokr", "train_time_gates": False}), "True")
+        self.assertEqual(gates_of({**base, "lora_type": "tglokr"}), "True")
+        # stale True must not silently turn plain GLoKR into T-GLoKR
+        self.assertIsNone(gates_of({**base, "lora_type": "glokr", "train_time_gates": True}))
+
+
 class LycorisMappingSymmetryTests(unittest.TestCase):
     def test_import_reverse_map_covers_every_ui_field(self):
         # The import table lagged behind the adapter's forward map, so imported

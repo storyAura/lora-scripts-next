@@ -124,7 +124,7 @@ Schema.intersect([
                 lora_type: Schema.const("tglokr").required(),
                 network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
                 lycoris_algo: Schema.const("glokr").default("glokr").hidden(),
-                train_time_gates: Schema.const(true).default(true).hidden(),
+                train_time_gates: Schema.boolean().default(true).hidden(),
                 time_gate_dim: Schema.number().min(1).step(1).default(4).description("时间门控的正弦编码频率数 K。K 越大越能表达复杂的时段曲线，参数量每模块 3×(2K+1)，默认 4 足够"),
                 kron_rank: Schema.number().min(1).step(1).default(2).description("Kronecker 项求和数。多项求和可打破单项分解的僵硬谱形，画风训练推荐 2~4；1 为经典单项模式"),
                 use_bora: Schema.boolean().default(true).description("BoRA 双向（行/列）权重解耦，画风训练推荐开启。开启后无需再开下方 dora_wd"),
