@@ -1,0 +1,71 @@
+# GLoKR 画风训练 preset (Flux / DiT)
+# 用法: 训练时传 network_args "preset=<此文件路径>" "algo=glokr"
+#
+# 思路:
+#   - single_blocks 的 linear1/linear2 承载纹理/笔触细节 → 大 dim + kron_rank=2
+#   - double_blocks 的 attn/mlp 管构图与语义 → 中等 dim
+#   - modulation / mod 层对全局风格影响过强、易把底模带偏 → 排除
+#   - rank_dropout 一律 0 (行 dropout 会随机糊掉纹理方向)
+#   - use_bora: 幅度/方向解耦; train_gates: 每层自学 G/B 配比
+#   - init_mode=nkp: 从 W₀ 的 Kronecker 主成分出发, 短周期训练收敛更快
+
+use_fnmatch = true
+target_module = []
+exclude_name = ["*mod*", "*modulation*"]
+
+[name_algo_map."single_blocks.*.linear*"]
+algo = "glokr"
+dim = 64
+alpha = 64
+kron_rank = 2
+use_g = true
+use_bora = true
+bora_iters = 2
+train_gates = true
+init_mode = "nkp"
+rank_dropout = 0.0
+
+[name_algo_map."double_blocks.*.img_mlp.*"]
+algo = "glokr"
+dim = 32
+alpha = 32
+kron_rank = 2
+use_g = true
+use_bora = true
+bora_iters = 2
+train_gates = true
+init_mode = "nkp"
+rank_dropout = 0.0
+
+[name_algo_map."double_blocks.*.txt_mlp.*"]
+algo = "glokr"
+dim = 32
+alpha = 32
+use_g = true
+use_bora = true
+bora_iters = 2
+train_gates = true
+init_mode = "nkp"
+rank_dropout = 0.0
+
+[name_algo_map."double_blocks.*.img_attn.*"]
+algo = "glokr"
+dim = 32
+alpha = 32
+use_g = true
+use_bora = true
+bora_iters = 2
+train_gates = true
+init_mode = "nkp"
+rank_dropout = 0.0
+
+[name_algo_map."double_blocks.*.txt_attn.*"]
+algo = "glokr"
+dim = 32
+alpha = 32
+use_g = true
+use_bora = true
+bora_iters = 2
+train_gates = true
+init_mode = "nkp"
+rank_dropout = 0.0
