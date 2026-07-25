@@ -1,1 +1,1 @@
-const e=JSON.parse('{"key":"v-help-algos","path":"/help/algorithms.html","title":"训练算法说明","lang":"zh-CN","frontmatter":{"type":"iframe","subtype":"/help/algorithms.html"},"excerpt":"","headers":[],"filePathRelative":"help/algorithms.md"}');export{e as data};
+const e=JSON.parse('{"key":"v-help-algos","path":"/help/algorithms.html","title":"训练算法说明","lang":"zh-CN","frontmatter":{"type":"iframe","subtype":"/help/algorithms-content.html"},"excerpt":"","headers":[],"filePathRelative":"help/algorithms.md"}');export{e as data};
