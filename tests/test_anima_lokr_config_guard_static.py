@@ -1,11 +1,15 @@
 import json
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from spa_asset_cache import SPA_ASSET_CACHE_KEY  # noqa: E402
 HTML = ROOT / "frontend" / "dist" / "lora" / "sd3.html"
 GUARD = ROOT / "frontend" / "dist" / "assets" / "anima-lokr-config-guard.js"
 NAV = ROOT / "frontend" / "dist" / "assets" / "sd-nav-i18n.js"
@@ -33,9 +37,11 @@ class AnimaLokrConfigGuardStaticTests(unittest.TestCase):
             if "sd-nav-i18n.js" in path.read_text(encoding="utf-8")
         ]
         self.assertTrue(pages)
+        # Track the shared dist cache key instead of pinning a literal: every dist
+        # patch bumps it via scripts/bump_spa_asset_cache_key.py.
         for page in pages:
             self.assertIn(
-                "sd-nav-i18n.js?v=2.8.35-issue186",
+                f"sd-nav-i18n.js?v={SPA_ASSET_CACHE_KEY}",
                 page.read_text(encoding="utf-8"),
                 page,
             )
