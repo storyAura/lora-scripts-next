@@ -20,7 +20,7 @@ Schema.intersect([
         logit_mean: Schema.number().step(0.01).description("logit_normal 权重策略的均值"),
         logit_std: Schema.number().step(0.01).description("logit_normal 权重策略的标准差"),
         mode_scale: Schema.number().step(0.01).description("mode 权重策略的缩放系数"),
-        attn_mode: Schema.union(["", "torch", "xformers", "sageattn", "flash"]).default("").description("Attention 加速实现。留空 = 自动选择最优方案（优先 Flash Attention 2，其次 xformers，最后 PyTorch SDPA）。推荐留空让系统自动检测。flash 需要安装 flash-attn 且显卡算力≥8.0（RTX 30系+）"),
+        attn_mode: Schema.union(["", "torch", "mem_efficient", "xformers", "sageattn", "flash"]).default("").description("Attention 加速实现。留空 = 自动选择最优方案（优先 Flash Attention 2，其次 xformers，最后 PyTorch SDPA）。推荐留空让系统自动检测。flash 需要安装 flash-attn 且显卡算力≥8.0（RTX 30系+）。mem_efficient = 强制 PyTorch Efficient SDPA 内核（高级选项，不参与自动选择）：省显存优先、不兼容时直接报错不回退，需 fp16/bf16 混合精度；在 RTX30 系+ 上可能比自动选择的 flash 内核慢，建议仅在显存吃紧或需要可复现基准时手动选用"),
         split_attn: Schema.boolean().default(false).description("拆分 attention 计算以降低显存占用，通常会牺牲训练速度"),
         vae_chunk_size: Schema.number().min(2).description("VAE 编码/解码分块大小（需为偶数）"),
         vae_disable_cache: Schema.boolean().default(false).description("禁用内部 VAE 缓存机制"),
@@ -203,6 +203,7 @@ Schema.intersect([
             Schema.object({
                 lora_type: Schema.const("lora_fa").required(),
                 network_module: Schema.const("networks.lora_anima").default("networks.lora_anima").hidden(),
+                lycoris_ext_hint: Schema.string().role('textarea').default("⚠ 当前版本的 LoRA-FA 选项尚未接入独立实现（冻结 down 矩阵的逻辑未生效），实际训练行为等同标准 LoRA。").disabled().description("LoRA-FA 实现状态"),
                 network_dropout: Schema.number().step(0.01).default(0).description("LoRA-FA dropout 概率"),
                 pissa_init: Schema.boolean().hidden(),
                 lycoris_algo: Schema.string().hidden(),
@@ -212,6 +213,7 @@ Schema.intersect([
             Schema.object({
                 lora_type: Schema.const("vera").required(),
                 network_module: Schema.const("networks.lora_anima").default("networks.lora_anima").hidden(),
+                lycoris_ext_hint: Schema.string().role('textarea').default("⚠ 当前版本的 VeRA 选项尚未接入独立实现（共享随机矩阵 + 缩放向量的逻辑未生效），实际训练行为等同标准 LoRA。").disabled().description("VeRA 实现状态"),
                 network_dropout: Schema.number().step(0.01).default(0).description("VeRA dropout 概率"),
                 pissa_init: Schema.boolean().hidden(),
                 lycoris_algo: Schema.string().hidden(),

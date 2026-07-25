@@ -19,7 +19,7 @@ Schema.intersect([
         logit_mean: Schema.number().step(0.01).description("logit_normal 权重策略的均值"),
         logit_std: Schema.number().step(0.01).description("logit_normal 权重策略的标准差"),
         mode_scale: Schema.number().step(0.01).description("mode 权重策略的缩放系数"),
-        attn_mode: Schema.union(["", "torch", "xformers", "sageattn", "flash"]).default("").description("Attention 加速实现。留空 = 自动选择最优方案"),
+        attn_mode: Schema.union(["", "torch", "mem_efficient", "xformers", "sageattn", "flash"]).default("").description("Attention 加速实现。留空 = 自动选择最优方案。mem_efficient = 强制 PyTorch Efficient SDPA 内核（高级选项）：省显存优先、不兼容直接报错不回退，需 fp16/bf16"),
         split_attn: Schema.boolean().default(false).description("拆分 attention 计算以降低显存占用"),
         vae_chunk_size: Schema.number().min(2).description("VAE 编码/解码分块大小（需为偶数）"),
         vae_disable_cache: Schema.boolean().default(false).description("禁用内部 VAE 缓存机制"),

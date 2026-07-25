@@ -112,7 +112,7 @@ def add_anima_training_arguments(parser: argparse.ArgumentParser):
     )
     parser.add_argument(
         "--attn_mode",
-        choices=["torch", "xformers", "flash", "sageattn", "sdpa"],  # "sdpa" is for backward compatibility
+        choices=["torch", "mem_efficient", "xformers", "flash", "sageattn", "sdpa"],  # "sdpa" is for backward compatibility
         default=None,
         help="Attention implementation to use. Default is None (torch). xformers requires --split_attn. sageattn does not support training (inference only). This option overrides --xformers or --sdpa."
         " / 使用するAttentionの実装。デフォルトはNone（torch）です。xformersは--split_attnの指定が必要です。sageattnはトレーニングをサポートしていません（推論のみ）。このオプションは--xformersまたは--sdpaを上書きします。",

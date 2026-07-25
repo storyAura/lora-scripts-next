@@ -1,5 +1,6 @@
 # Unified attention function supporting various implementations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 import torch
 from typing import Optional, Union
@@ -26,6 +27,29 @@ try:
 except ImportError:
     xops = None
 
+try:
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+except ImportError:
+    SDPBackend = None
+    sdpa_kernel = None
+
+
+def _sdpa_backend_context(attn_mode: Optional[str]):
+    """mem_efficient = 强制 PyTorch memory-efficient SDPA kernel（PyTorch Efficient SDPA）。
+
+    不允许自动切换到 flash / math backend；设备、dtype、shape 或 mask 不支持时
+    直接报错（fail-fast），不做静默回退。每次调用返回新的 context，可安全用于循环。
+    """
+    if attn_mode != "mem_efficient":
+        return nullcontext()
+    if sdpa_kernel is None or SDPBackend is None:
+        raise RuntimeError(
+            "attn_mode='mem_efficient' requires a PyTorch version that provides "
+            "torch.nn.attention.sdpa_kernel (SDPBackend.EFFICIENT_ATTENTION). "
+            "Use attn_mode='torch' instead on this PyTorch version."
+        )
+    return sdpa_kernel(SDPBackend.EFFICIENT_ATTENTION)
+
 
 @dataclass
 class AttentionParams:
@@ -39,7 +63,7 @@ class AttentionParams:
 
     @property
     def supports_fp32(self) -> bool:
-        return self.attn_mode not in ["flash"]
+        return self.attn_mode not in ["flash", "mem_efficient"]
 
     @property
     def requires_same_dtype(self) -> bool:
@@ -80,7 +104,7 @@ class AttentionParams:
                 attention_mask = xops.fmha.attn_bias.BlockDiagonalMask.from_seqlens(
                     seqlens_list, seqlens_list, device=attention_mask.device
                 )
-            elif attn_mode == "torch":
+            elif attn_mode in ("torch", "mem_efficient"):
                 attention_mask = attention_mask[:, None, None, :].to(torch.bool)  # [B, 1, 1, img_len + L]
 
             return AttentionParams(attn_mode, split_attn, img_len, attention_mask, seqlens, cu_seqlens, max_seqlen)
@@ -135,7 +159,7 @@ def attention(
             seqlen_trimmed = True
 
     # Determine tensor layout based on attention implementation
-    if attn_params.attn_mode == "torch" or (
+    if attn_params.attn_mode in ("torch", "mem_efficient") or (
         attn_params.attn_mode == "sageattn" and (attn_params.split_attn or attn_params.cu_seqlens is None)
     ):
         transpose_fn = lambda x: x.transpose(1, 2)  # [B, H, L, D] for SDPA and sageattn with fixed length
@@ -161,11 +185,12 @@ def attention(
         k = transpose_fn(k)
         v = transpose_fn(v)
 
-    if attn_params.attn_mode == "torch":
+    if attn_params.attn_mode in ("torch", "mem_efficient"):
         if attn_params.split_attn:
             x = []
             for i in range(len(q)):
-                x_i = torch.nn.functional.scaled_dot_product_attention(q[i], k[i], v[i], dropout_p=drop_rate)
+                with _sdpa_backend_context(attn_params.attn_mode):
+                    x_i = torch.nn.functional.scaled_dot_product_attention(q[i], k[i], v[i], dropout_p=drop_rate)
                 q[i] = None
                 k[i] = None
                 v[i] = None
@@ -174,7 +199,8 @@ def attention(
             del q, k, v
 
         else:
-            x = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_params.attention_mask, dropout_p=drop_rate)
+            with _sdpa_backend_context(attn_params.attn_mode):
+                x = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_params.attention_mask, dropout_p=drop_rate)
             del q, k, v
 
     elif attn_params.attn_mode == "xformers":
