@@ -274,12 +274,14 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
 <section class="card" id="lora_fa">
   <h2>LoRA-FA <span class="algo-tag tag-local">本地扩展</span></h2>
   <p class="lead">Frozen-A LoRA：冻结 down（A）矩阵、只训练 up（B）矩阵。A 不更新就不用存它的优化器状态和激活梯度，显存占用明显下降，效果接近普通 LoRA。显存吃紧时的替代方案。</p>
+  <div class="tip warn">⚠ 当前版本尚未接入独立实现：选择 LoRA-FA 实际训练行为等同标准 LoRA（冻结逻辑未生效）。</div>
   <p>界面参数与 LoRA 相同（<code>network_dropout</code>）。</p>
 </section>
 
 <section class="card" id="vera">
   <h2>VeRA <span class="algo-tag tag-local">本地扩展</span></h2>
   <p class="lead">Vector-based Random-matrix Adaptation：所有层共享一对<b>冻结的随机</b>低秩矩阵，每层只训练两个小小的缩放向量。可训练参数比 LoRA 少一到两个量级——参数极限压缩的选择，表达力也相应有限。</p>
+  <div class="tip warn">⚠ 当前版本尚未接入独立实现：选择 VeRA 实际训练行为等同标准 LoRA。</div>
   <p>界面参数与 LoRA 相同（<code>network_dropout</code>）。</p>
 </section>
 
