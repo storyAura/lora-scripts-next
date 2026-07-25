@@ -98,6 +98,95 @@ class HuberScheduleGuardTests(unittest.TestCase):
         self._trainer().assert_extra_args(args, self._dataset_group(), None)
         self.assertEqual(args.huber_schedule, "snr")
 
+    def test_sigma_with_shift_warns_but_does_not_mutate(self):
+        args = self._args(timestep_sampling="sigma", discrete_flow_shift=3.0)
+        with self.assertLogs(level="WARNING") as captured:
+            self._trainer().assert_extra_args(args, self._dataset_group(), None)
+        self.assertTrue(any("discrete_flow_shift" in msg for msg in captured.output))
+        self.assertEqual(args.timestep_sampling, "sigma")
+        self.assertEqual(args.discrete_flow_shift, 3.0)
+
+
+class RotaryEmbeddingShortcutTests(unittest.TestCase):
+    def test_full_rot_dim_matches_manual_rotation(self):
+        # Anima's config has rot_dim == head_dim, so t_pass is empty and the cat is skipped.
+        from library import anima_models
+
+        S, B, H, D = 6, 2, 2, 8
+        t = torch.randn(S, B, H, D)
+        freqs = torch.randn(S, 1, 1, D)
+        out = anima_models._apply_rotary_pos_emb_base(t, freqs)
+        cos_, sin_ = torch.cos(freqs).to(t.dtype), torch.sin(freqs).to(t.dtype)
+        expected = (t * cos_) + (anima_models._rotate_half(t, False) * sin_)
+        self.assertEqual(out.shape, t.shape)
+        self.assertTrue(torch.allclose(out, expected, atol=1e-6))
+
+    def test_partial_rot_dim_keeps_pass_through_channels(self):
+        from library import anima_models
+
+        S, B, H, D, ROT = 6, 2, 2, 8, 4
+        t = torch.randn(S, B, H, D)
+        freqs = torch.randn(S, 1, 1, ROT)
+        out = anima_models._apply_rotary_pos_emb_base(t, freqs)
+        self.assertEqual(out.shape, t.shape)
+        self.assertTrue(torch.equal(out[..., ROT:], t[..., ROT:]), "t_pass channels must pass through untouched")
+
+
+@unittest.skipUnless(torch.cuda.is_available(), "cpu_offload checkpointing needs CUDA")
+class CpuOffloadCheckpointingTests(unittest.TestCase):
+    def test_multi_block_forward_backward_with_cpu_offload(self):
+        # Regression: device inference from inputs made block 2+ crash (inputs already on CPU).
+        from library import anima_models, attention
+
+        device = torch.device("cuda")
+        blocks = [anima_models.Block(x_dim=32, context_dim=16, num_heads=2).to(device) for _ in range(3)]
+        for b in blocks:
+            b.enable_gradient_checkpointing(cpu_offload=True)
+            b.train()
+
+        x = torch.randn(1, 2, 2, 2, 32, device=device)  # [B, T, H, W, D]
+        emb = torch.randn(1, 2, 32, device=device)
+        ctx = torch.randn(1, 4, 16, device=device)
+        attn_params = attention.AttentionParams.create_attention_params("torch", False)
+
+        for b in blocks:
+            x = b(x, emb, ctx, attn_params, False)
+
+        # cpu_offload leaves the last block's output on CPU — mirror the
+        # forward_mini_train_dit recovery before the "final layer" stage.
+        x = x.to(device)
+        x.float().sum().backward()
+        self.assertTrue(any(p.grad is not None for p in blocks[0].parameters()))
+        self.assertTrue(any(p.grad is not None for p in blocks[-1].parameters()))
+
+
+class AllocatorEnvInjectionTests(unittest.TestCase):
+    def test_train_subprocess_gets_fragmentation_config(self):
+        import os
+        import sys as _sys
+
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from mikazuki.process import build_accelerate_train_command
+
+        saved = os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+        try:
+            _, env, _ = build_accelerate_train_command(trainer_file="x.py", toml_path="missing.toml")
+            expected = (
+                "garbage_collection_threshold:0.8,max_split_size_mb:512"
+                if _sys.platform == "win32"
+                else "expandable_segments:True"
+            )
+            self.assertEqual(env.get("PYTORCH_CUDA_ALLOC_CONF"), expected)
+
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "user-custom"
+            _, env, _ = build_accelerate_train_command(trainer_file="x.py", toml_path="missing.toml")
+            self.assertEqual(env.get("PYTORCH_CUDA_ALLOC_CONF"), "user-custom", "user setting must win")
+        finally:
+            if saved is None:
+                os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+            else:
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = saved
+
 
 class TimestepDtypeTests(unittest.TestCase):
     def test_noisy_input_timesteps_stay_fp32(self):
