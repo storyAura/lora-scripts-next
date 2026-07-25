@@ -102,6 +102,8 @@ Schema.intersect([
                 use_bora: Schema.boolean().default(true).description("BoRA 双向（行/列）权重解耦，画风训练推荐开启。开启后无需再开下方 dora_wd"),
                 bora_iters: Schema.number().min(1).step(1).default(2).description("BoRA 行/列交替平衡迭代次数，推荐 2~3；1 为单次平衡（原始行为）"),
                 train_gates: Schema.boolean().default(true).description("每条路径可学习门控 + Kronecker 项混合系数，让 G/B 路径配比逐层自适应"),
+                train_time_gates: Schema.boolean().default(false).description("T-GLoKR 时间步门控（实验特性）：为 B/A/C 三条路径各学一个随去噪进度变化的软门控，让「结构期靠底模重组、细节期靠自由增量」的配比交给梯度自动发现。零初始化，开启时训练起点与不开启完全一致"),
+                time_gate_dim: Schema.number().min(1).step(1).default(4).description("时间门控的正弦编码频率数 K。参数量每模块 3×(2K+1)，默认 4 足够"),
                 init_mode: Schema.union(["nkp", "kaiming"]).default("nkp").description("初始化方式。nkp = Van Loan 主成分对齐初始化（推荐，短周期训练收敛更快）；kaiming = 经典随机初始化"),
                 use_g_out: Schema.boolean().default(false).description("输出侧 C·W₀ 路径（约每层 6k 参数），色调/氛围向增强。属消融项，建议同数据集开/关对照一轮"),
                 g_norm_mode: Schema.union(["frobenius", "spectral"]).default("frobenius").description("G 路径尺度对齐所用范数。spectral 可让各层有效学习率更均匀"),

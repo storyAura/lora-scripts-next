@@ -320,18 +320,34 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         w_latent = latents.shape[-1]
         padding_mask = torch.zeros(bs, 1, h_latent, w_latent, dtype=weight_dtype, device=accelerator.device)
 
+        # Feed the current timesteps to timestep-aware adapters (T-LoRA rank masking,
+        # GLoKR time gates). Unwrap a possible accelerate/DDP wrapper first; networks
+        # without the hook are silently skipped.
+        target_network = getattr(network, "module", network)
+        set_ts = getattr(target_network, "set_current_timestep", None)
+        if callable(set_ts):
+            set_ts(timesteps)
+
         # Call model
         noisy_model_input = noisy_model_input.unsqueeze(2)  # 4D to 5D, [B, C, H, W] -> [B, C, 1, H, W]
-        with torch.set_grad_enabled(is_train), accelerator.autocast():
-            model_pred = anima(
-                noisy_model_input,
-                model_timesteps,
-                prompt_embeds,
-                padding_mask=padding_mask,
-                target_input_ids=t5_input_ids,
-                target_attention_mask=t5_attn_mask,
-                source_attention_mask=attn_mask,
-            )
+        try:
+            with torch.set_grad_enabled(is_train), accelerator.autocast():
+                model_pred = anima(
+                    noisy_model_input,
+                    model_timesteps,
+                    prompt_embeds,
+                    padding_mask=padding_mask,
+                    target_input_ids=t5_input_ids,
+                    target_attention_mask=t5_attn_mask,
+                    source_attention_mask=attn_mask,
+                )
+        finally:
+            if callable(set_ts):
+                clear_ts = getattr(target_network, "clear_current_timestep", None)
+                if callable(clear_ts):
+                    clear_ts()
+                else:
+                    set_ts(None)
         model_pred = model_pred.squeeze(2)  # 5D to 4D, [B, C, 1, H, W] -> [B, C, H, W]
 
         # Rectified flow target: noise - latents
