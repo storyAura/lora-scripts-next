@@ -63,6 +63,12 @@ def _build_glokr(extra_args=None):
     return net, dit
 
 
+def _is_truthy_flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _perturb(net, scale=0.05):
     """Deterministically perturb adapter weights so ΔW != 0 (gates become observable).
 
@@ -192,6 +198,83 @@ class TGLoKRTests(unittest.TestCase):
         net3, _ = _build_glokr({"train_time_gates": "True"})
         m3 = net3.unet_loras[0]
         m3.load_state_dict(legacy, strict=False)  # must not raise
+
+
+class TGLoKRLoraTypeBranchTests(unittest.TestCase):
+    """tglokr is its own lora_type in the UI while running as algo=glokr."""
+
+    def test_schema_exposes_tglokr_branch(self):
+        schema = (PROJECT_ROOT / "mikazuki" / "schema" / "sd3-lora.ts").read_text(encoding="utf-8")
+        self.assertIn('"tglokr"', schema.split("lora_type: Schema.union(", 1)[1][:400])
+        self.assertIn('lora_type: Schema.const("tglokr").required()', schema)
+
+    def test_tglokr_ui_config_builds_gated_module(self):
+        adapted, _ = adapt_anima_config({
+            "pretrained_model_name_or_path": "x.safetensors",
+            "lora_type": "tglokr",
+            "network_module": "lycoris.kohya",
+            "lycoris_algo": "glokr",
+            "train_time_gates": True,
+            "time_gate_dim": 4,
+            "kron_rank": 2,
+            "lokr_factor": -1,
+        })
+        args = {i.split("=", 1)[0]: i.split("=", 1)[1] for i in adapted["network_args"]}
+        self.assertEqual(args.get("algo"), "glokr")
+        self.assertEqual(args.get("train_time_gates"), "True")
+        self.assertNotIn("lora_type", adapted, "lora_type is UI-only, must not reach sd-scripts")
+
+        net, _ = _build_glokr({"train_time_gates": args["train_time_gates"],
+                               "time_gate_dim": args["time_gate_dim"]})
+        self.assertTrue(all(hasattr(m, "time_gate_w") for m in net.unet_loras))
+
+    def test_config_round_trip_keeps_tglokr_branch(self):
+        # export/import infer lora_type from algo; algo=glokr alone would land on
+        # plain GLoKR, so the time-gate flag must disambiguate in both directions.
+        from mikazuki.utils.config_export import _ensure_gui_identity_fields
+        from mikazuki.utils.config_import import _hydrate_lycoris_ui_fields_from_network_args
+
+        exported = {"lycoris_algo": "glokr", "train_time_gates": True}
+        _ensure_gui_identity_fields(exported, page_train_type="anima-lora")
+        self.assertEqual(exported["lora_type"], "tglokr")
+
+        plain = {"lycoris_algo": "glokr"}
+        _ensure_gui_identity_fields(plain, page_train_type="anima-lora")
+        self.assertEqual(plain["lora_type"], "glokr")
+
+        from_args = {"network_args": ["algo=glokr", "train_time_gates=True"]}
+        _ensure_gui_identity_fields(from_args, page_train_type="anima-lora")
+        self.assertEqual(from_args["lora_type"], "tglokr")
+
+        imported = {
+            "network_module": "lycoris.kohya",
+            "network_args": ["algo=glokr", "train_time_gates=True"],
+        }
+        _hydrate_lycoris_ui_fields_from_network_args(imported)
+        self.assertEqual(imported.get("lora_type"), "tglokr")
+        self.assertTrue(_is_truthy_flag(imported.get("train_time_gates")))
+
+        imported_plain = {
+            "network_module": "lycoris.kohya",
+            "network_args": ["algo=glokr"],
+        }
+        _hydrate_lycoris_ui_fields_from_network_args(imported_plain)
+        self.assertEqual(imported_plain.get("lora_type"), "glokr")
+
+
+class LycorisMappingSymmetryTests(unittest.TestCase):
+    def test_import_reverse_map_covers_every_ui_field(self):
+        # The import table lagged behind the adapter's forward map, so imported
+        # configs silently dropped every extension-algo field. Keep them in sync.
+        from mikazuki.anima_backend.adapter import LYCORIS_NETWORK_ARG_MAP
+        from mikazuki.utils.config_import import _LYCORIS_NETWORK_ARG_TO_UI
+
+        missing = {
+            arg_key: ui_field
+            for ui_field, arg_key in LYCORIS_NETWORK_ARG_MAP.items()
+            if _LYCORIS_NETWORK_ARG_TO_UI.get(arg_key) != ui_field
+        }
+        self.assertEqual(missing, {}, f"import map missing/mismatched entries: {missing}")
 
 
 class AdapterForwardingTests(unittest.TestCase):

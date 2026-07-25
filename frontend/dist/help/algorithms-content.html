@@ -104,6 +104,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <a href="#lora">LoRA</a>
   <a href="#lokr">LoKr</a>
   <a href="#glokr">GLoKR</a>
+  <a href="#tglokr">T-GLoKR</a>
   <a href="#bokr">BoKR</a>
   <a href="#bora">BoRA</a>
   <a href="#gsokr">GloKrSora</a>
@@ -124,6 +125,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>lora</code></td><td>最经典的低秩适配，万金油</td><td>中</td><td>人物 / 概念 / 常规训练，首选</td></tr>
     <tr><td><code>lokr</code></td><td>Kronecker 积分解，参数更省</td><td>小</td><td>画风训练、泛化要求高</td></tr>
     <tr><td><code>glokr</code></td><td>LoKr + GLoRA 三路径融合，画风特化</td><td>小</td><td>画风训练主推，默认即推荐配置</td></tr>
+    <tr><td><code>tglokr</code></td><td>GLoKR + 时间步门控（本地原创，实验性）</td><td>小</td><td>画风；想让路径配比随去噪阶段自适应</td></tr>
     <tr><td><code>bokr</code></td><td>LoKr + BoRA 双向幅值解耦</td><td>小</td><td>画风，想要更稳的幅度控制</td></tr>
     <tr><td><code>bora</code></td><td>LoRA + BoRA 双向幅值解耦</td><td>中</td><td>常规训练 + 幅度解耦收益</td></tr>
     <tr><td><code>gsokr</code></td><td>GLoKR 的 SoRA 稀疏化变体（实验）</td><td>小</td><td>想自动裁剪冗余 rank 的尝鲜者</td></tr>
@@ -203,6 +205,26 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <div class="tip warn">network_dim 建议 32~64（GLoKR 参数量远小于同 dim 的 LoRA，开 64 无压力）；<code>bypass_mode</code> 与 DoRA/BoRA 互斥。</div>
 </section>
 
+<section class="card" id="tglokr">
+  <h2>T-GLoKR <span class="algo-tag tag-local">本地原创</span><span class="algo-tag tag-exp">实验性</span></h2>
+  <p class="lead">T-GLoKR = GLoKR + <b>时间步门控</b>。GLoKR 的三条路径本就分工不同，但它们的配比在整个去噪过程中是固定的；T-GLoKR 让每条路径各学一条「随去噪进度变化的出力曲线」，把「哪个阶段该用哪条路」从人工设定变成梯度自己发现。</p>
+  <ul>
+    <li><b>灵感来源</b>：T-LoRA（AAAI 2026）发现<b>高噪声阶段最容易过拟合</b>（那时画布几乎全是噪声，全容量适配器学的是"背噪声"），它的对策是按时间步调节 rank 的<b>数量</b>；T-GLoKR 调节的则是容量的<b>类型</b>——高噪声期可以更多依赖"贴着底模走"的 A 路（结构安全），细节期再放开自由增量的 B 路。</li>
+    <li><b>怎么实现</b>：每个模块一个极小的门控头（正弦编码时间步 → 3 个 0~2 之间的系数，分别乘在 B/A/C 三条路径上）。整个模型增加的参数不到 1%。</li>
+    <li><b>安全设计</b>：门控<b>零初始化</b>，训练第 0 步与普通 GLoKR <b>逐位一致</b>；旧 GLoKR 存档可直接加载（按无门控处理），T-GLoKR 存档也能在不支持的环境退化加载。</li>
+    <li><b>怎么看效果</b>：训练完把各层门控参数取出来画曲线，就是模型自己总结的「路径-时段分工表」。与 T-LoRA 的先验一致 = 相互印证；不一致 = 新发现。</li>
+  </ul>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>time_gate_dim</code></td><td>4</td><td>时间门控的正弦编码频率数 K。越大越能表达复杂时段曲线，参数量每模块 3×(2K+1)</td></tr>
+    <tr><td><code>train_gates</code></td><td>开</td><td>静态路径门控，管"这层这条路总体多重要"；与时间门控相乘，两者互补</td></tr>
+    <tr><td><code>use_g_out</code></td><td>关</td><td>输出侧 C 路。时间门控下它最可能学出"中低噪声段发力"的曲线，值得开一轮对照</td></tr>
+    <tr><td colspan="3">其余参数（kron_rank / use_bora / bora_iters / init_mode / lokr_factor 等）与 <a class="back-link" href="#glokr">GLoKR</a> 完全相同</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">实验性算法：<b>时变的增量无法完美烘焙成静态权重</b>——挂载出图（正常用法）完整保留时变行为；若要 merge 进底模，只能用平均门控近似，属有损。另：门控按 batch 内平均时间步计算，本项目默认 batch_size=1 时为逐样本精确。</div>
+</section>
 <section class="card" id="bokr">
   <h2>BoKR <span class="algo-tag tag-local">本地扩展</span></h2>
   <p class="lead">BoKR = LoKr + BoRA 双向权重解耦。骨架与 LoKr 相同（Kronecker 低秩），在合并时对行、列两个方向做范数归一 + 可学习缩放，幅度控制比 DoRA（仅单向）更均匀。</p>

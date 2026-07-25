@@ -409,6 +409,22 @@ _LYCORIS_NETWORK_ARG_TO_UI: dict[str, str] = {
     "module_dropout": "module_dropout",
     "rank_dropout_scale": "rank_dropout_scale",
     "train_norm": "train_norm",
+    # Local extension algos (glokr / tglokr / gsokr / glora_boft) — keep in sync
+    # with LYCORIS_NETWORK_ARG_MAP in mikazuki/anima_backend/adapter.py.
+    "kron_rank": "kron_rank",
+    "use_bora": "use_bora",
+    "bora_iters": "bora_iters",
+    "train_gates": "train_gates",
+    "train_time_gates": "train_time_gates",
+    "time_gate_dim": "time_gate_dim",
+    "init_mode": "init_mode",
+    "use_g_out": "use_g_out",
+    "g_norm_mode": "g_norm_mode",
+    "use_sora": "use_sora",
+    "sora_r": "sora_r",
+    "sora_epsilon": "sora_epsilon",
+    "constraint": "boft_constraint",
+    "rescaled": "boft_rescaled",
 }
 
 _LYCORIS_BOOL_UI_FIELDS = frozenset({
@@ -420,6 +436,12 @@ _LYCORIS_BOOL_UI_FIELDS = frozenset({
     "full_matrix",
     "rank_dropout_scale",
     "train_norm",
+    "use_bora",
+    "train_gates",
+    "train_time_gates",
+    "use_g_out",
+    "use_sora",
+    "boft_rescaled",
 })
 
 _LYCORIS_ALGO_TO_LORA_TYPE = {
@@ -432,6 +454,16 @@ _LYCORIS_ALGO_TO_LORA_TYPE = {
     "diag-oft": "diag-oft",
     "boft": "boft",
 }
+
+
+def _is_truthy_import_flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
 
 
 def _is_invalid_import_scalar(value: str) -> bool:
@@ -495,7 +527,12 @@ def _hydrate_lycoris_ui_fields_from_network_args(config: dict) -> None:
 
     algo = str(parsed.get("algo") or config.get("lycoris_algo") or "").strip().lower()
     if algo and not config.get("lora_type"):
-        config["lora_type"] = _LYCORIS_ALGO_TO_LORA_TYPE.get(algo, algo)
+        lora_type = _LYCORIS_ALGO_TO_LORA_TYPE.get(algo, algo)
+        # T-GLoKR shares algo=glokr with plain GLoKR; the time gates are what
+        # distinguish it, so recover the UI branch from that flag.
+        if lora_type == "glokr" and _is_truthy_import_flag(config.get("train_time_gates")):
+            lora_type = "tglokr"
+        config["lora_type"] = lora_type
 
 
 def _sanitize_arg_lines(config: dict, key: str) -> None:
