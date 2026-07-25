@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>训练算法说明 - SD Trainer</title>
+<style>
+:root {
+  --bg: #f7f8fc;
+  --card: #ffffff;
+  --text: #1f2328;
+  --text-sub: #5b6472;
+  --border: #e4e8f1;
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.10);
+  --good: #16a34a;
+  --warn: #d97706;
+  --code-bg: #f1f3f9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1218;
+    --card: #171b23;
+    --text: #e6e9ef;
+    --text-sub: #9aa4b2;
+    --border: #2a3140;
+    --accent: #818cf8;
+    --accent-soft: rgba(129, 140, 248, 0.14);
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --code-bg: #1f2530;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.75;
+  font-size: 15px;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+header.page-head { margin-bottom: 18px; }
+header.page-head h1 { margin: 0 0 6px; font-size: 26px; }
+header.page-head p { margin: 0; color: var(--text-sub); }
+a.back-link { color: var(--accent); text-decoration: none; font-size: 14px; }
+a.back-link:hover { text-decoration: underline; }
+nav.toc {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; margin: 18px 0 26px; display: flex; flex-wrap: wrap; gap: 8px 14px;
+}
+nav.toc a {
+  color: var(--accent); text-decoration: none; font-size: 13.5px;
+  padding: 3px 10px; background: var(--accent-soft); border-radius: 999px;
+}
+nav.toc a:hover { filter: brightness(1.08); }
+section.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 22px 26px; margin-bottom: 22px;
+}
+section.card h2 { margin: 0 0 10px; font-size: 20px; scroll-margin-top: 16px; }
+section.card h3 { margin: 20px 0 8px; font-size: 16px; }
+.algo-tag {
+  display: inline-block; font-size: 12px; padding: 1px 9px; border-radius: 999px;
+  vertical-align: 3px; margin-left: 8px; font-weight: normal;
+}
+.tag-local { background: var(--accent-soft); color: var(--accent); }
+.tag-exp { background: rgba(217, 119, 6, 0.12); color: var(--warn); }
+.tag-std { background: rgba(22, 163, 74, 0.12); color: var(--good); }
+p.lead { color: var(--text-sub); margin-top: 0; }
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { border: 1px solid var(--border); padding: 7px 11px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); white-space: nowrap; }
+td:first-child { white-space: nowrap; }
+code {
+  background: var(--code-bg); border-radius: 5px; padding: 1px 6px;
+  font-family: Consolas, "Courier New", monospace; font-size: 0.92em;
+}
+.tip {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; font-size: 14px;
+}
+.tip.warn { border-left-color: var(--warn); background: rgba(217, 119, 6, 0.08); }
+ul { padding-left: 22px; margin: 8px 0; }
+li { margin: 3px 0; }
+footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; margin-top: 34px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page-head">
+  <a class="back-link" href="/lora/sd3.html">← 返回 Anima LoRA 训练页</a>
+  <h1>训练算法说明（lora_type 全解）</h1>
+  <p>Anima 训练页「适配器类型」下拉中每种算法的原理、区别与专属参数。所有本地扩展算法的推荐参数已在界面中可视化，选中算法即为推荐配置，无需手写 network_args。</p>
+</header>
+
+<nav class="toc">
+  <a href="#quick">快速选择</a>
+  <a href="#basics">基础概念</a>
+  <a href="#lora">LoRA</a>
+  <a href="#lokr">LoKr</a>
+  <a href="#glokr">GLoKR</a>
+  <a href="#bokr">BoKR</a>
+  <a href="#bora">BoRA</a>
+  <a href="#gsokr">GloKrSora</a>
+  <a href="#glora_boft">GLoRA-BOFT</a>
+  <a href="#tlora">T-LoRA</a>
+  <a href="#lora_fa">LoRA-FA</a>
+  <a href="#vera">VeRA</a>
+  <a href="#loha">LoHa</a>
+  <a href="#custom">自定义 network_args</a>
+</nav>
+
+<section class="card" id="quick">
+  <h2>快速选择</h2>
+  <p class="lead">拿不准就按这张表选。「本地扩展」算法仅作用于 Linear 层（Conv 层自动跳过），专为 Anima 等 DiT 模型设计。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>算法</th><th>一句话</th><th>参数量</th><th>适合场景</th></tr>
+    <tr><td><code>lora</code></td><td>最经典的低秩适配，万金油</td><td>中</td><td>人物 / 概念 / 常规训练，首选</td></tr>
+    <tr><td><code>lokr</code></td><td>Kronecker 积分解，参数更省</td><td>小</td><td>画风训练、泛化要求高</td></tr>
+    <tr><td><code>glokr</code></td><td>LoKr + GLoRA 三路径融合，画风特化</td><td>小</td><td>画风训练主推，默认即推荐配置</td></tr>
+    <tr><td><code>bokr</code></td><td>LoKr + BoRA 双向幅值解耦</td><td>小</td><td>画风，想要更稳的幅度控制</td></tr>
+    <tr><td><code>bora</code></td><td>LoRA + BoRA 双向幅值解耦</td><td>中</td><td>常规训练 + 幅度解耦收益</td></tr>
+    <tr><td><code>gsokr</code></td><td>GLoKR 的 SoRA 稀疏化变体（实验）</td><td>小</td><td>想自动裁剪冗余 rank 的尝鲜者</td></tr>
+    <tr><td><code>glora_boft</code></td><td>GLoRA + 蝶形正交变换</td><td>中</td><td>结构保持要求高的迁移</td></tr>
+    <tr><td><code>tlora</code></td><td>按时间步动态调 rank，抗过拟合</td><td>中</td><td>小数据集、容易过拟合的题材</td></tr>
+    <tr><td><code>lora_fa</code></td><td>冻结 down 矩阵的 LoRA，省显存</td><td>中</td><td>显存吃紧时的 LoRA 替代</td></tr>
+    <tr><td><code>vera</code></td><td>共享随机矩阵 + 只学缩放向量</td><td>极小</td><td>极限省参数 / 快速实验</td></tr>
+    <tr><td><code>loha</code></td><td>Hadamard 积低秩，细节表达强</td><td>中</td><td>画风 / 细节向（经典 LyCORIS）</td></tr>
+  </table>
+  </div>
+</section>
+
+<section class="card" id="basics">
+  <h2>基础概念（先看这里）</h2>
+  <ul>
+    <li><b>增量训练（ΔW）</b>：所有这些算法都不改动底模，而是学一个小小的"补丁" ΔW，出图时叠加到原权重上。好处：文件小、可拔插、可调强度。</li>
+    <li><b>rank / network_dim</b>：补丁的"表达力"。想象用几根线去拟合一幅画：线越多（rank 越高）能描得越细，但也越容易把训练集的噪声一起学进去。</li>
+    <li><b>network_alpha</b>：补丁的"音量旋钮"。实际缩放 = alpha ÷ dim，所以 alpha 常设为 dim 或 dim/2。</li>
+    <li><b>Kronecker 积（LoKr 家族）</b>：用两块小拼图"相乘"拼出一整面大墙。同样一面墙，存两块小拼图比存整面墙省得多——这就是 LoKr 系参数量小的原因。</li>
+    <li><b>权重解耦（DoRA / BoRA）</b>：把"往哪个方向改"和"改多大力度"拆开来学。DoRA 只按行（输出维）解耦；BoRA 行、列两个方向都解耦，再交替平衡几轮，力度控制更均匀。</li>
+    <li><b>bypass 模式</b>：不在显存里重建大矩阵，直接作用于激活值。适合量化底模或显存紧张，但与 DoRA/BoRA 解耦互斥。</li>
+  </ul>
+</section>
+
+<section class="card" id="lora">
+  <h2>LoRA <span class="algo-tag tag-std">标准</span></h2>
+  <p class="lead">ΔW = B×A 两个低秩矩阵相乘。生态最成熟、工具链兼容性最好，常规训练无脑选它。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>network_dropout</code></td><td>0</td><td>LoRA dropout 概率，抑制过拟合</td></tr>
+    <tr><td><code>pissa_init</code></td><td>关</td><td>PiSSA 初始化：用底模权重的主成分方向做起点，收敛更快（实验性）。开启后可进一步选择分解方式与导出模式</td></tr>
+  </table>
+  </div>
+</section>
+
+<section class="card" id="lokr">
+  <h2>LoKr <span class="algo-tag tag-std">标准 LyCORIS</span></h2>
+  <p class="lead">把 ΔW 分解成两个小矩阵的 Kronecker 积，参数量比 LoRA 小一个量级，画风训练的经典选择。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>lokr_factor</code></td><td>-1</td><td>Kronecker 分解因子。-1 = 最均衡分解（推荐）；也可填 4、8 等</td></tr>
+    <tr><td><code>full_matrix</code></td><td>关</td><td>全矩阵模式（高风险），系统会自动附加稳定性护栏</td></tr>
+    <tr><td><code>use_cp</code></td><td>关</td><td>CP 分解</td></tr>
+    <tr><td><code>use_scalar</code></td><td>关</td><td>可学习全局缩放（0.01 起步）替代零初始化</td></tr>
+    <tr><td><code>decompose_both</code></td><td>关</td><td>同时低秩分解两个 Kron 因子（默认只分解 w2）</td></tr>
+    <tr><td><code>dora_wd</code></td><td>关</td><td>DoRA 单向权重解耦</td></tr>
+    <tr><td><code>bypass_mode</code></td><td>关</td><td>QLyCORIS bypass 前向</td></tr>
+  </table>
+  </div>
+</section>
+
+<section class="card" id="glokr">
+  <h2>GLoKR <span class="algo-tag tag-local">本地扩展 · 画风主推</span></h2>
+  <p class="lead">GLoKR = LoKr（Kronecker 低秩）+ GLoRA（乘性重参数化）的融合体。用极少的参数同时学<b>三种</b>权重更新：</p>
+  <ul>
+    <li><b>B 路（增量）</b>：往画布上叠新贴纸 → 擅长新纹理、新笔触</li>
+    <li><b>A 路（输入侧 G 路径，恒定启用）</b>：在原镜头前加滤镜 → 重组已有特征，结构安全</li>
+    <li><b>C 路（输出侧 G 路径，可选）</b>：调整输出混色 → 色调 / 氛围类全局风格</li>
+  </ul>
+  <div class="tip">界面默认值即画风推荐配置（kron_rank=2 + BoRA + 门控 + NKP 初始化），选中算法直接开练即可。完整数学原理见 <code>venv/Lib/site-packages/lycoris/GLOKR.md</code>。</div>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>kron_rank</code></td><td>2</td><td>Kronecker 项求和数。多项求和打破单项分解的僵硬谱形，画风推荐 2~4；1 为经典单项模式</td></tr>
+    <tr><td><code>use_bora</code></td><td>开</td><td>BoRA 双向（行/列）权重解耦。开启后无需再开 dora_wd</td></tr>
+    <tr><td><code>bora_iters</code></td><td>2</td><td>BoRA 行/列交替平衡（Sinkhorn 式）迭代次数，推荐 2~3，消除"先行后列"顺序偏置</td></tr>
+    <tr><td><code>train_gates</code></td><td>开</td><td>每条路径 1 个可学习门控 + Kron 项混合系数，G/B 配比逐层自适应</td></tr>
+    <tr><td><code>init_mode</code></td><td>nkp</td><td>nkp = Van Loan 最近 Kronecker 积分解初始化，梯度第一步就流入有意义的子空间（PiSSA 思路的 Kron 移植），短周期收敛更快；kaiming = 经典随机</td></tr>
+    <tr><td><code>use_g_out</code></td><td>关</td><td>输出侧 C·W₀ 路径（约每层 6k 参数），色调/氛围向。属消融项，建议同数据集开/关对照</td></tr>
+    <tr><td><code>g_norm_mode</code></td><td>frobenius</td><td>G 路径尺度对齐范数；spectral 可让各层有效学习率更均匀</td></tr>
+    <tr><td><code>lokr_factor</code></td><td>-1</td><td>Kronecker 分解因子，与 LoKr 相同</td></tr>
+    <tr><td><code>rank_dropout</code></td><td>空</td><td>画风训练建议保持 0 / 留空</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">network_dim 建议 32~64（GLoKR 参数量远小于同 dim 的 LoRA，开 64 无压力）；<code>bypass_mode</code> 与 DoRA/BoRA 互斥。</div>
+</section>
+
+<section class="card" id="bokr">
+  <h2>BoKR <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">BoKR = LoKr + BoRA 双向权重解耦。骨架与 LoKr 相同（Kronecker 低秩），在合并时对行、列两个方向做范数归一 + 可学习缩放，幅度控制比 DoRA（仅单向）更均匀。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>dora_wd</code></td><td>开</td><td><b>BoKR 的核心开关</b>：即 BoRA 双向解耦；关闭则退化为普通 LoKr</td></tr>
+    <tr><td><code>lokr_factor</code></td><td>-1</td><td>Kronecker 分解因子，同 LoKr</td></tr>
+    <tr><td><code>use_scalar</code> / <code>decompose_both</code> / <code>full_matrix</code></td><td>关</td><td>同 LoKr 语义</td></tr>
+    <tr><td><code>bypass_mode</code></td><td>关</td><td>与 BoRA 解耦互斥，二选一</td></tr>
+  </table>
+  </div>
+</section>
+
+<section class="card" id="bora">
+  <h2>BoRA <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">BoRA = 在标准 LoRA 骨架上做双向（行 m<sup>r</sup> + 列 m<sup>c</sup>）幅值分解。方向由低秩矩阵学，力度由两个幅值向量学，互不干扰。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>dora_wd</code></td><td>开</td><td><b>BoRA 的核心开关</b>：双向幅值解耦；关闭则退化为普通 LoRA</td></tr>
+    <tr><td><code>use_scalar</code></td><td>关</td><td>可学习全局缩放替代零初始化</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">BoRA 解耦与 <code>bypass_mode</code> 互斥（界面已不提供该组合）。</div>
+</section>
+
+<section class="card" id="gsokr">
+  <h2>GloKrSora <span class="algo-tag tag-local">本地扩展</span><span class="algo-tag tag-exp">实验性</span></h2>
+  <p class="lead">GLoKR 的 SoRA 稀疏化变体：在 GLoKR 基础上加一个可学习的稀疏门控，训练中自动"掐掉"贡献低的 rank，相当于边训练边做结构瘦身。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>use_sora</code></td><td>开</td><td><b>核心开关</b>：SoRA 稀疏门控；关闭则退化为 GLoKR 基础形态</td></tr>
+    <tr><td><code>sora_r</code></td><td>4</td><td>稀疏门控的 rank 数</td></tr>
+    <tr><td><code>sora_epsilon</code></td><td>1e-5</td><td>数值稳定项，一般不动</td></tr>
+    <tr><td><code>lokr_factor</code></td><td>-1</td><td>Kronecker 分解因子</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">实验性算法：未开启 sora 门控的存档无法与 GLoKR 存档自动区分，建议保留训练配置。</div>
+</section>
+
+<section class="card" id="glora_boft">
+  <h2>GLoRA-BOFT <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">GLoRA 乘性重参数化 + BOFT（蝶形正交变换）的组合：用一连串"蝶形"小旋转矩阵拼出正交变换，旋转特征而不拉伸它们——好比只转动镜头角度、不改变焦距，结构保持性更强。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>boft_constraint</code></td><td>0</td><td>COFT 正交约束半径，限制旋转幅度；0 = 不启用约束</td></tr>
+    <tr><td><code>boft_rescaled</code></td><td>关</td><td>对正交旋转附加可学习缩放（rescaled 变体）</td></tr>
+  </table>
+  </div>
+</section>
+
+<section class="card" id="tlora">
+  <h2>T-LoRA <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">Timestep 依赖的动态 rank LoRA：高噪声时间步只用低 rank（学大结构），低噪声时间步开满 rank（学细节）。像素级细节在去噪后段才决定，这样分配能显著抑制小数据集过拟合。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>tlora_min_rank</code></td><td>4</td><td>高噪声 timestep 下的最低有效维度，建议 ≥ network_dim/8</td></tr>
+    <tr><td><code>tlora_rank_schedule</code></td><td>cosine</td><td>rank 随 timestep 的调度曲线。cosine 更平滑（推荐），linear 更激进</td></tr>
+    <tr><td><code>tlora_orthogonal_init</code></td><td>开</td><td>对 lora_down 用正交初始化，加速收敛</td></tr>
+  </table>
+  </div>
+  <div class="tip">network_dim 建议 32（动态 rank 需要更大的基础维度），network_alpha 建议等于 network_dim。</div>
+</section>
+
+<section class="card" id="lora_fa">
+  <h2>LoRA-FA <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">Frozen-A LoRA：冻结 down（A）矩阵、只训练 up（B）矩阵。A 不更新就不用存它的优化器状态和激活梯度，显存占用明显下降，效果接近普通 LoRA。显存吃紧时的替代方案。</p>
+  <p>界面参数与 LoRA 相同（<code>network_dropout</code>）。</p>
+</section>
+
+<section class="card" id="vera">
+  <h2>VeRA <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">Vector-based Random-matrix Adaptation：所有层共享一对<b>冻结的随机</b>低秩矩阵，每层只训练两个小小的缩放向量。可训练参数比 LoRA 少一到两个量级——参数极限压缩的选择，表达力也相应有限。</p>
+  <p>界面参数与 LoRA 相同（<code>network_dropout</code>）。</p>
+</section>
+
+<section class="card" id="loha">
+  <h2>LoHa <span class="algo-tag tag-std">标准 LyCORIS</span></h2>
+  <p class="lead">Low-rank Hadamard product：ΔW = (B₁A₁) ⊙ (B₂A₂)，两组低秩积逐元素相乘。同样参数量下秩上限更高，细节表达力强，是画风训练的另一经典选择。</p>
+  <p>界面参数：<code>network_dropout</code>。</p>
+</section>
+
+<section class="card" id="custom">
+  <h2>自定义 network_args（进阶）</h2>
+  <ul>
+    <li>常用参数都已可视化；「自定义 network_args」仅用于极少数未上界面的进阶项（如 <code>wd_on_output=False</code>、<code>rs_lora=True</code>、<code>preset=xxx.toml</code>）。</li>
+    <li><b>界面字段优先</b>：同名参数同时出现在界面与自定义框时，以界面显示的值为准（所见即所得）。</li>
+    <li>本地扩展算法仅作用于 Linear 层，Conv / Norm 层自动跳过，属预期行为，日志中的 skip 提示无需理会。</li>
+    <li>训练模块归属：<code>lora / tlora / lora_fa / vera / loha</code> 走内置 networks 实现；<code>lokr / glokr / bokr / bora / gsokr / glora_boft</code> 走 <code>lycoris.kohya</code>，系统会自动注入 Anima 专用 preset（声明可训练模块），无需手动配置。</li>
+  </ul>
+</section>
+
+<footer class="page-foot">SD Trainer · 训练算法说明 · 深入原理请阅读 lycoris 包内 GLOKR.md</footer>
+
+</div>
+</body>
+</html>

@@ -47,6 +47,7 @@
     帮助: "Help",
     新手上路: "Getting Started",
     训练参数说明: "Training Parameters",
+    训练算法说明: "Training Algorithms",
     其他: "More",
     "UI 设置": "UI Settings",
     关于: "About",
@@ -314,6 +315,33 @@
     a.appendChild(document.createTextNode(" 终端 "));
     li.appendChild(a);
     othersGroup.appendChild(li);
+  }
+
+  function ensureAlgorithmHelpLink() {
+    const sidebar = document.querySelector(".sidebar .sidebar-items");
+    if (!sidebar) return;
+    if (sidebar.querySelector('a[href="/help/algorithms.html"]')) return;
+
+    let helpGroup = null;
+    sidebar.querySelectorAll("li").forEach((li) => {
+      if (helpGroup) return;
+      const heading = li.querySelector(":scope > p.sidebar-item.sidebar-heading");
+      if (!heading) return;
+      const text = normalize(heading.textContent);
+      if (text === "帮助" || text === "Help") {
+        helpGroup = li.querySelector(":scope > ul.sidebar-item-children");
+      }
+    });
+    if (!helpGroup) return;
+
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = "/help/algorithms.html";
+    a.className = "sidebar-item";
+    a.setAttribute("aria-label", "训练算法说明");
+    a.appendChild(document.createTextNode(" 训练算法说明 "));
+    li.appendChild(a);
+    helpGroup.appendChild(li);
   }
 
   function setSidebarAnchorLabel(anchor, text) {
@@ -896,6 +924,7 @@
     const map = english ? ZH_TO_EN : EN_TO_ZH;
     ensureSidebarTerminalLink();
     ensureTagEditorLinks();
+    ensureAlgorithmHelpLink();
     const sidebar = document.querySelector(".sidebar .sidebar-items");
     if (sidebar) replaceInElement(sidebar, map);
 
