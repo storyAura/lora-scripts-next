@@ -344,6 +344,35 @@
     helpGroup.appendChild(li);
   }
 
+  // 旧「训练参数说明」为编译期 VuePress 页面（SD1.5 时代内容），已由静态新页替代。
+  // 点击劫持 + 直访重定向双保险，无需改动编译产物中的旧页面 chunk。
+  const LEGACY_PARAMS_PATHS = ["/lora/params.html", "/lora/params.md"];
+  const NEW_PARAMS_PATH = "/help/training-params.html";
+
+  function redirectLegacyParamsPage() {
+    if (LEGACY_PARAMS_PATHS.indexOf(location.pathname) !== -1) {
+      location.replace(NEW_PARAMS_PATH);
+    }
+  }
+
+  function hookLegacyParamsLinks() {
+    if (document.documentElement.dataset.sdParamsHookInstalled) return;
+    document.documentElement.dataset.sdParamsHookInstalled = "1";
+    document.addEventListener(
+      "click",
+      (ev) => {
+        const a = ev.target && ev.target.closest ? ev.target.closest("a") : null;
+        if (!a) return;
+        const href = a.getAttribute("href") || "";
+        if (LEGACY_PARAMS_PATHS.indexOf(href) === -1) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        location.href = NEW_PARAMS_PATH;
+      },
+      true
+    );
+  }
+
   function setSidebarAnchorLabel(anchor, text) {
     if (!anchor) return;
     anchor.setAttribute("aria-label", text);
@@ -981,6 +1010,7 @@
     if (scheduled) clearTimeout(scheduled);
     scheduled = setTimeout(() => {
       scheduled = null;
+      redirectLegacyParamsPage();
       ensureAnimaLokrConfigGuard();
       applyNavLocale();
       hookLanguageToggle();
@@ -990,6 +1020,8 @@
 
   function boot() {
     migrateLegacyLocale();
+    redirectLegacyParamsPage();
+    hookLegacyParamsLinks();
     ensureAnimaLokrConfigGuard();
     applyNavLocale();
     hookLanguageToggle();
