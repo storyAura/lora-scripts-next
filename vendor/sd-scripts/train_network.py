@@ -775,6 +775,10 @@ class NetworkTrainer:
         # DataLoaderのプロセス数：0 は persistent_workers が使えないので注意
         n_workers = min(args.max_data_loader_n_workers, os.cpu_count())  # cpu_count or max_data_loader_n_workers
 
+        # pin_memory: page-locked staging makes the per-step H2D copy of cached
+        # latents/text-embeds faster and overlappable; negligible host RAM cost.
+        pin_memory = torch.cuda.is_available()
+
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset_group,
             batch_size=1,
@@ -782,6 +786,7 @@ class NetworkTrainer:
             collate_fn=collator,
             num_workers=n_workers,
             persistent_workers=args.persistent_data_loader_workers,
+            pin_memory=pin_memory,
         )
 
         val_dataloader = torch.utils.data.DataLoader(
@@ -791,6 +796,7 @@ class NetworkTrainer:
             collate_fn=collator,
             num_workers=n_workers,
             persistent_workers=args.persistent_data_loader_workers,
+            pin_memory=pin_memory,
         )
 
         # 学習ステップ数を計算する

@@ -134,10 +134,13 @@ class AnimaTextEncodingStrategy(TextEncodingStrategy):
 
         for i in range(prompt_embeds.shape[0]):
             if random.random() < caption_dropout_rates[i].item():
-                # Use pre-cached unconditional embeddings
+                # Drop to an unconditional embedding: zero the embeds but keep ONE valid
+                # mask position — an all-zero attention mask makes every SDPA row fully
+                # masked, which produces NaN and poisons the whole batch's gradients.
                 prompt_embeds[i] = 0
                 if attn_mask is not None:
                     attn_mask[i] = 0
+                    attn_mask[i, 0] = 1
                 if t5_input_ids is not None:
                     t5_input_ids[i, 0] = 1  # Set to </s> token ID
                     t5_input_ids[i, 1:] = 0
@@ -197,6 +200,9 @@ class AnimaTextEncoderOutputsCachingStrategy(TextEncoderOutputsCachingStrategy):
     def load_outputs_npz(self, npz_path: str) -> List[np.ndarray]:
         data = np.load(npz_path)
         prompt_embeds = data["prompt_embeds"]
+        if prompt_embeds.dtype == np.float16:
+            # New caches store fp16 (see cache_batch_outputs); old fp32 caches load as-is.
+            prompt_embeds = prompt_embeds.astype(np.float32)
         attn_mask = data["attn_mask"]
         t5_input_ids = data["t5_input_ids"]
         t5_attn_mask = data["t5_attn_mask"]
@@ -219,9 +225,11 @@ class AnimaTextEncoderOutputsCachingStrategy(TextEncoderOutputsCachingStrategy):
                 tokenize_strategy, models, tokens_and_masks
             )
 
-        # Convert to numpy for caching
-        if prompt_embeds.dtype == torch.bfloat16:
-            prompt_embeds = prompt_embeds.float()
+        # Convert to numpy for caching. Store as fp16 instead of upcasting bf16→fp32:
+        # halves disk size and per-step read IO; training casts to weight_dtype anyway,
+        # and Qwen3 hidden states stay far below the fp16 range.
+        if prompt_embeds.dtype in (torch.bfloat16, torch.float32):
+            prompt_embeds = prompt_embeds.to(torch.float16)
         prompt_embeds = prompt_embeds.cpu().numpy()
         attn_mask = attn_mask.cpu().numpy()
         t5_input_ids = t5_input_ids.cpu().numpy().astype(np.int32)

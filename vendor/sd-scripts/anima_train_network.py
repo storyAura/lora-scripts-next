@@ -75,6 +75,22 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
                 args.blocks_to_swap is None or args.blocks_to_swap == 0
             ), "blocks_to_swap is not supported with unsloth_offload_checkpointing"
 
+        # FlowMatch scheduler has no alphas_cumprod, so the default huber_schedule="snr"
+        # raises NotImplementedError as soon as huber/smooth_l1 loss is selected.
+        if args.loss_type in ("huber", "smooth_l1") and getattr(args, "huber_schedule", None) == "snr":
+            logger.warning(
+                "huber_schedule='snr' is not supported with the FlowMatch scheduler; falling back to 'exponential'."
+            )
+            args.huber_schedule = "exponential"
+
+        # timestep_sampling="sigma" with discrete_flow_shift != 1 trains on shifted sigmas
+        # but conditions the model on unshifted t — inconsistent with inference.
+        if args.timestep_sampling == "sigma" and getattr(args, "discrete_flow_shift", 1.0) not in (None, 1.0):
+            logger.warning(
+                "timestep_sampling='sigma' ignores discrete_flow_shift for the model's t conditioning; "
+                "prefer timestep_sampling='shift' when using discrete_flow_shift."
+            )
+
         train_dataset_group.verify_bucket_reso_steps(16)  # WanVAE spatial downscale = 8 and patch size = 2
         if val_dataset_group is not None:
             val_dataset_group.verify_bucket_reso_steps(16)
@@ -92,7 +108,9 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         vae = qwen_image_autoencoder_kl.load_vae(
             args.vae, device="cpu", disable_mmap=True, spatial_chunk_size=args.vae_chunk_size, disable_cache=args.vae_disable_cache
         )
-        vae.to(weight_dtype)
+        # Respect --no_half_vae: casting to bf16 here would truncate the weights for good
+        # (the base trainer's later fp32 cast cannot restore lost precision).
+        vae.to(torch.float32 if args.no_half_vae else weight_dtype)
         vae.eval()
 
         # Return format: (model_type, text_encoders, vae, unet)
@@ -276,14 +294,14 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         noisy_model_input, timesteps, sigmas = flux_train_utils.get_noisy_model_input_and_timesteps(
             args, noise_scheduler, latents, noise, accelerator.device, weight_dtype
         )
-        timesteps = timesteps / 1000.0  # scale to [0, 1] range. timesteps is float32
+        # Anima DiT expects t in [0, 1]; keep the original [0, 1000] timesteps for the
+        # base trainer, whose huber threshold scheduling assumes that range.
+        model_timesteps = timesteps.float() / 1000.0
 
-        # Gradient checkpointing support
-        if args.gradient_checkpointing:
-            noisy_model_input.requires_grad_(True)
-            for t in text_encoder_conds:
-                if t is not None and t.dtype.is_floating_point:
-                    t.requires_grad_(True)
+        # NOTE: no requires_grad_(True) workaround needed here — all Anima blocks run
+        # torch checkpoint with use_reentrant=False, which does not require inputs to
+        # have requires_grad. Forcing it on cached text embeds made the frozen LLM
+        # adapter and x_embedder build backward graphs for nothing (pure VRAM waste).
 
         # Unpack text encoder conditions
         prompt_embeds, attn_mask, t5_input_ids, t5_attn_mask = text_encoder_conds[
@@ -307,7 +325,7 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         with torch.set_grad_enabled(is_train), accelerator.autocast():
             model_pred = anima(
                 noisy_model_input,
-                timesteps,
+                model_timesteps,
                 prompt_embeds,
                 padding_mask=padding_mask,
                 target_input_ids=t5_input_ids,

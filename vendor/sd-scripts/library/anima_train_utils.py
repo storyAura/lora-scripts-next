@@ -334,17 +334,19 @@ def do_sample(
     # Latent shape: (1, 16, 1, H/8, W/8) for single image
     latent_h = height // 8
     latent_w = width // 8
-    latent = torch.zeros(1, 16, 1, latent_h, latent_w, device=device, dtype=dtype)
+    latent_size = (1, 16, 1, latent_h, latent_w)
 
     # Generate noise
     if seed is not None:
         generator = torch.manual_seed(seed)
     else:
         generator = None
-    noise = torch.randn(latent.size(), dtype=torch.float32, generator=generator, device="cpu").to(dtype).to(device)
+    noise = torch.randn(latent_size, dtype=torch.float32, generator=generator, device="cpu").to(dtype).to(device)
 
-    # Timestep schedule: linear from 1.0 to 0.0
-    sigmas = torch.linspace(1.0, 0.0, steps + 1, device=device, dtype=dtype)
+    # Timestep schedule: linear from 1.0 to 0.0.
+    # Build in fp32 — a bf16 schedule quantizes 30-step dt (~0.033) at ~0.004 granularity,
+    # visibly degrading preview quality. Values are cast where the model needs them.
+    sigmas = torch.linspace(1.0, 0.0, steps + 1, device=device, dtype=torch.float32)
     flow_shift = float(flow_shift)
     if flow_shift != 1.0:
         sigmas = (sigmas * flow_shift) / (1 + (flow_shift - 1) * sigmas)

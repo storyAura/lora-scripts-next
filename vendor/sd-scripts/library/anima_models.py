@@ -169,6 +169,9 @@ def _apply_rotary_pos_emb_base(
     rot_dim = freqs.shape[-1]
     t, t_pass = t[..., :rot_dim], t[..., rot_dim:]
     t = (t * cos_) + (_rotate_half(t, interleaved) * sin_)
+    if t_pass.shape[-1] == 0:
+        # Anima: rot_dim == head_dim, so t_pass is always empty — skip the full-size copy
+        return t
     return torch.cat((t, t_pass), dim=-1)
 
 
@@ -980,10 +983,13 @@ class Block(nn.Module):
                 )
             elif self.cpu_offload_checkpointing:
                 # Standard cpu offload: blocking transfers
-                def create_custom_forward(func):
+                # NOTE: compute device must come from the block weights, not from the
+                # inputs — from the 2nd block on, the previous block's output is already
+                # on CPU (to_cpu below), so input-based inference picks "cpu" and crashes.
+                block_device = next(self.parameters()).device
+
+                def create_custom_forward(func, device):
                     def custom_forward(*inputs):
-                        # Determine original device from first tensor input
-                        device = next(t.device for t in inputs if isinstance(t, torch.Tensor))
                         device_inputs = to_device(inputs, device)
                         outputs = func(*device_inputs)
                         return to_cpu(outputs)
@@ -991,7 +997,7 @@ class Block(nn.Module):
                     return custom_forward
 
                 return torch_checkpoint(
-                    create_custom_forward(self._forward),
+                    create_custom_forward(self._forward, block_device),
                     x_B_T_H_W_D,
                     emb_B_T_D,
                     crossattn_emb,
@@ -1354,6 +1360,11 @@ class Anima(nn.Module):
 
             if self.blocks_to_swap:
                 self.offloader.submit_move_blocks(self.blocks, block_idx)
+
+        # cpu_offload_checkpointing leaves the last block's output on CPU; bring it
+        # back before final_layer (whose weights live on the compute device).
+        if x_B_T_H_W_D.device != t_embedding_B_T_D.device:
+            x_B_T_H_W_D = x_B_T_H_W_D.to(t_embedding_B_T_D.device)
 
         x_B_T_H_W_O = self.final_layer(x_B_T_H_W_D, t_embedding_B_T_D, adaln_lora_B_T_3D=adaln_lora_B_T_3D, use_fp32=use_fp32)
         x_B_C_Tt_Hp_Wp = self.unpatchify(x_B_T_H_W_O)

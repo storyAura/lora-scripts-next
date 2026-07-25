@@ -6,12 +6,18 @@ import copy
 import gc
 import math
 import os
+import sys
 from multiprocessing import Value
 from typing import Optional
 
 # bucket 切替で発生しうる稀な断片化 OOM 対策
 # torch import より前に環境変数を設定する必要があるため、ここで setdefault しておく.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+# expandable_segments は Windows 非対応（PyTorch が警告して無視する）ため、
+# Windows では GC しきい値 + split 上限で代替する。
+if sys.platform == "win32":
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8,max_split_size_mb:512")
+else:
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import toml
 import numpy as np

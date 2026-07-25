@@ -526,7 +526,9 @@ def get_noisy_model_input_and_timesteps(
     else:
         noisy_model_input = (1.0 - sigmas) * latents + sigmas * noise
 
-    return noisy_model_input.to(dtype), timesteps.to(dtype), sigmas
+    # Keep timesteps in fp32: casting to bf16 quantizes values near 1000 to steps of ~4,
+    # so the model would be conditioned on a t that no longer matches the fp32 sigmas.
+    return noisy_model_input.to(dtype), timesteps.float(), sigmas
 
 
 def apply_model_prediction_type(args, model_pred, noisy_model_input, sigmas):

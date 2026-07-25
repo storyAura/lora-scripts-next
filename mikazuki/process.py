@@ -136,6 +136,15 @@ def build_accelerate_train_command(
     if project_root not in path_parts:
         path_parts.insert(0, project_root)
     customize_env["PYTHONPATH"] = os.pathsep.join(path_parts)
+    # CUDA allocator: mitigate VRAM fragmentation OOM (bucketed resolutions and
+    # block swap produce variable-size allocations). expandable_segments is not
+    # supported on Windows (PyTorch warns and ignores it), so use GC threshold +
+    # split cap there. A user-set PYTORCH_CUDA_ALLOC_CONF always wins.
+    if "PYTORCH_CUDA_ALLOC_CONF" not in customize_env:
+        if sys.platform == "win32":
+            customize_env["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8,max_split_size_mb:512"
+        else:
+            customize_env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     customize_env["ACCELERATE_DISABLE_RICH"] = "1"
     customize_env["PYTHONUNBUFFERED"] = "1"
     customize_env["PYTHONWARNINGS"] = "ignore::FutureWarning,ignore::UserWarning"
