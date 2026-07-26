@@ -239,5 +239,82 @@ optimizer_args = ["decouple=True", "weight_deca"]
         self.assertEqual(result["config"]["lokr_factor"], -1)
 
 
+class AnimaLoraTypeBranchConstTests(unittest.TestCase):
+    """History snapshots lack hidden union consts (network_module / lycoris_algo).
+
+    The frontend fullReplace merge backfills them from the union's FIRST branch
+    defaults, which poisons every non-"lora" branch and blanks the form + TOML
+    preview. The backend must derive them from lora_type so the merge overrides
+    the poisoned defaults.
+    """
+
+    EXPECTED = {
+        "lora": ("networks.lora_anima", None),
+        "lora_fa": ("networks.lora_anima", None),
+        "vera": ("networks.lora_anima", None),
+        "tlora": ("networks.tlora_anima", None),
+        "loha": ("networks.loha", None),
+        "lokr": ("lycoris.kohya", "lokr"),
+        "glokr": ("lycoris.kohya", "glokr"),
+        "tglokr": ("lycoris.kohya", "glokr"),
+        "bokr": ("lycoris.kohya", "bokr"),
+        "bora": ("lycoris.kohya", "bora"),
+        "gsokr": ("lycoris.kohya", "gsokr"),
+        "glora_boft": ("lycoris.kohya", "glora_boft"),
+    }
+
+    def test_every_lora_type_snapshot_gets_branch_consts(self):
+        for lora_type, (module, algo) in self.EXPECTED.items():
+            with self.subTest(lora_type=lora_type):
+                snapshot = {
+                    "model_train_type": "anima-lora",
+                    "lora_type": lora_type,
+                    "network_dim": 32,
+                }
+                result = validate_config_import("sd3-lora", snapshot)
+                self.assertEqual(result["result"], "ok")
+                self.assertEqual(result["config"]["network_module"], module)
+                if algo is not None:
+                    self.assertEqual(result["config"]["lycoris_algo"], algo)
+
+    def test_stale_lycoris_algo_from_other_branch_is_corrected(self):
+        snapshot = {
+            "model_train_type": "anima-lora",
+            "lora_type": "bokr",
+            "lycoris_algo": "glokr",
+            "network_module": "lycoris.kohya",
+        }
+        result = validate_config_import("sd3-lora", snapshot)
+        self.assertEqual(result["config"]["lycoris_algo"], "bokr")
+
+    def test_stale_network_module_from_other_branch_is_corrected(self):
+        snapshot = {
+            "model_train_type": "anima-lora",
+            "lora_type": "tlora",
+            "network_module": "lycoris.kohya",
+        }
+        result = validate_config_import("sd3-lora", snapshot)
+        self.assertEqual(result["config"]["network_module"], "networks.tlora_anima")
+
+    def test_lora_type_recovered_from_unambiguous_network_module(self):
+        for module, expected in (
+            ("networks.tlora_anima", "tlora"),
+            ("networks.loha", "loha"),
+        ):
+            with self.subTest(module=module):
+                config = {
+                    "model_train_type": "anima-lora",
+                    "network_module": module,
+                }
+                result = validate_config_import("sd3-lora", config)
+                self.assertEqual(result["config"]["lora_type"], expected)
+
+    def test_non_anima_page_is_untouched(self):
+        config = {"model_train_type": "flux-lora", "lora_type": "lokr"}
+        result = validate_config_import("flux-lora", config)
+        self.assertEqual(result["result"], "ok")
+        self.assertNotIn("network_module", result["config"])
+
+
 if __name__ == "__main__":
     unittest.main()

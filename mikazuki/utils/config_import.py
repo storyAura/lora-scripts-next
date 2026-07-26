@@ -455,6 +455,37 @@ _LYCORIS_ALGO_TO_LORA_TYPE = {
     "boft": "boft",
 }
 
+# Hidden per-branch consts of the sd3-lora.ts lora_type union. When a history
+# snapshot / imported config lacks these keys (the form never writes hidden
+# fields), the frontend fullReplace merge falls back to the union's FIRST
+# branch defaults (network_module="networks.lora_anima"), which contradicts the
+# selected branch's const — the whole union stops matching and the form section
+# plus the TOML preview go blank. Deriving them from lora_type server-side lets
+# the frontend merge override the poisoned default. Keep in sync with
+# mikazuki/schema/sd3-lora.ts branch consts.
+_ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
+    "lora": {"network_module": "networks.lora_anima"},
+    "lora_fa": {"network_module": "networks.lora_anima"},
+    "vera": {"network_module": "networks.lora_anima"},
+    "tlora": {"network_module": "networks.tlora_anima"},
+    "loha": {"network_module": "networks.loha"},
+    "lokr": {"network_module": "lycoris.kohya", "lycoris_algo": "lokr"},
+    "glokr": {"network_module": "lycoris.kohya", "lycoris_algo": "glokr"},
+    "tglokr": {"network_module": "lycoris.kohya", "lycoris_algo": "glokr"},
+    "bokr": {"network_module": "lycoris.kohya", "lycoris_algo": "bokr"},
+    "bora": {"network_module": "lycoris.kohya", "lycoris_algo": "bora"},
+    "gsokr": {"network_module": "lycoris.kohya", "lycoris_algo": "gsokr"},
+    "glora_boft": {"network_module": "lycoris.kohya", "lycoris_algo": "glora_boft"},
+}
+
+# Reverse lookup for TOML imports that carry network_module but no lora_type
+# (lycoris.kohya is ambiguous — _hydrate_lycoris_ui_fields_from_network_args
+# recovers those from network_args algo instead).
+_ANIMA_NETWORK_MODULE_TO_LORA_TYPE = {
+    "networks.tlora_anima": "tlora",
+    "networks.loha": "loha",
+}
+
 
 def _is_truthy_import_flag(value) -> bool:
     if isinstance(value, bool):
@@ -552,12 +583,30 @@ def _sanitize_arg_lines(config: dict, key: str) -> None:
         config.pop(key, None)
 
 
+def _apply_anima_lora_type_consts(config: dict) -> None:
+    """Force branch-consistent hidden consts so the lora_type union keeps matching."""
+    train_type = _normalize_train_type(config.get("model_train_type"))
+    if train_type not in ANIMA_TRAIN_TYPES:
+        return
+    lora_type = str(config.get("lora_type") or "").strip()
+    if not lora_type:
+        recovered = _ANIMA_NETWORK_MODULE_TO_LORA_TYPE.get(
+            str(config.get("network_module") or "").strip()
+        )
+        if recovered:
+            config["lora_type"] = lora_type = recovered
+    consts = _ANIMA_LORA_TYPE_BRANCH_CONSTS.get(lora_type)
+    if consts:
+        config.update(consts)
+
+
 def _finalize_import_config(config: dict) -> dict:
     """Apply cross-page normalizers for imported GUI configs."""
     normalized = copy.deepcopy(config)
     _sanitize_arg_lines(normalized, "network_args")
     _sanitize_arg_lines(normalized, "optimizer_args")
     _hydrate_lycoris_ui_fields_from_network_args(normalized)
+    _apply_anima_lora_type_consts(normalized)
     ensure_enable_preview_flag(normalized)
     return normalized
 
