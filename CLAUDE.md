@@ -93,10 +93,32 @@ equal means the backend is current and the stale copy is in the browser (hard-re
 
 Each schema is a `Schema.union([...])` discriminated by `lora_type`, every branch being a
 `Schema.object` keyed `lora_type: Schema.const("<name>").required()`. **Do not use
-`Schema.const()` for any other field in a branch.** The browser autosaves raw, unvalidated form
-values, so a leftover value from another branch makes the union match nothing and the submit
-handler throws *before* any request is sent — which surfaces as a misleading "network error".
-Prefer a tolerant type plus a server-side override derived from `lora_type` in the adapter.
+`Schema.const()` for any other field in a branch.** The form model carries raw, unvalidated
+values across branch switches, autosave and history restore — a leftover value that conflicts
+with a branch const makes the union match nothing: the branch section vanishes, the TOML
+preview goes blank, and submit throws *before* any request is sent (a misleading "network
+error"). The implemented pattern: branch-stamped fields (`network_module`, `lycoris_algo`) are
+tolerant `Schema.string().default(...)`, and `ANIMA_LORA_TYPE_BRANCH_CONSTS` in
+`mikazuki/utils/config_import.py` is the single source of truth — the import path stamps the
+right values on restore, `_apply_lora_type_overrides()` in the adapter forces them at train
+time regardless of what the form carried. Changing a branch's module/algo means updating that
+map in the same commit.
+
+Two rendering rules: a union only gets a dropdown when it has **more than one** visible choice
+(a single-option union renders no control at all), and a safe union that may legitimately not
+match needs a trailing `Schema.object({})` fallback branch (see the optimizer unions).
+
+### Saving / loading params ("保存参数 / 读取参数") and config import
+
+Saving pushes a **raw form snapshot** into `localStorage["configs-<type>"]`; the autosave
+(`configs-<type>-autosave`) is restored into the form verbatim on page load, no backend
+involved. Applying a history entry and importing a TOML both POST to
+`/api/config/validate-import` (`mikazuki/utils/config_import.py`: type detection, redirect
+between pages, network_args → UI field hydration), after which the frontend merges *page
+schema defaults + returned config*. Those defaults resolve every union to its **first**
+branch, so any branch-dependent key the backend does not stamp explicitly silently falls back
+to branch-1 values — that is why `validate-import` derives `network_module`/`lycoris_algo`
+from `lora_type` instead of trusting the snapshot.
 
 ### Verifying a training change
 
@@ -186,6 +208,17 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
   factors"), not a capacity dial — huge values are idiomatic. Capacity comes from `factor`
   (`-1` = balanced = *fewest* parameters; smaller values inflate them quadratically) and, for
   GLoKR, from `kron_rank` (linear).
+- Preview sampling: `sample_sampler` is decorative — the only implementation is the built-in
+  rectified-flow Euler in `anima_train_utils.do_sample()`. `sample_scheduler` is real
+  (simple/beta). Per-image sample params travel as prompt-line flags
+  (`--w --h --s --l --d --ss --sch --fs`) baked by `get_sample_prompts()`, never as TOML keys
+  (the adapter drops all `sample_*` UI fields). `--fs <flow_shift>` (default 3.0) is parsed by
+  the trainer but not exposed in the UI.
+- Timestep-aware adapters (T-LoRA rank masking, T-GLoKR time gates) read
+  `network.set_current_timestep()`. The train loop injects per-batch timesteps in [0, 1000]
+  and must **not** clear them before backward (gradient checkpointing re-runs the forward);
+  preview sampling injects the per-step sigma in [0, 1] via `do_sample(timestep_callback=...)`.
+  Consumers divide values > 1 by 1000, so both scales agree.
 - On Windows an over-committed allocation does not raise: it silently spills into shared system
   memory and training keeps "running" at a crawl. GPU **power draw** tells the two apart —
   near the limit means real compute, roughly half means it is stalled on memory transfers.
