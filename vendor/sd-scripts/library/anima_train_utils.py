@@ -354,6 +354,7 @@ def do_sample(
     flow_shift: float = 3.0,
     neg_crossattn_emb: Optional[torch.Tensor] = None,
     scheduler: str = "simple",
+    timestep_callback=None,
 ) -> torch.Tensor:
     """Generate a sample using Euler discrete sampling for rectified flow.
 
@@ -369,6 +370,9 @@ def do_sample(
         flow_shift: Flow shift parameter for rectified flow
         neg_crossattn_emb: Negative cross-attention embeddings for CFG
         scheduler: Timestep spacing, "simple" (uniform) or "beta" (Beta(0.6, 0.6))
+        timestep_callback: Called with the current fp32 sigma (in [0, 1]) before each
+            Euler step, so timestep-aware adapters (T-LoRA rank masking, T-GLoKR time
+            gates) see the same t during preview as during training
 
     Returns:
         Denoised latents
@@ -398,6 +402,10 @@ def do_sample(
 
     for i in tqdm(range(steps), desc="Sampling"):
         sigma = sigmas[i]
+        if timestep_callback is not None:
+            # fp32 sigma in [0, 1]; consumers normalize >1 inputs themselves, so
+            # this matches the [0, 1000] values injected during training.
+            timestep_callback(sigma)
         # Schedule/Euler math stays fp32 (see sigmas above); the model gets the
         # timestep in its own dtype, matching how it is called during training.
         t = sigma.unsqueeze(0).to(dtype)  # (1,)
@@ -436,6 +444,7 @@ def sample_images(
     prompt_replacement=None,
     on_prompt_start=None,
     on_prompt_end=None,
+    network=None,
 ):
     """Generate sample images during training.
 
@@ -445,6 +454,11 @@ def sample_images(
         Optional callbacks invoked around each prompt's `_sample_image_inference` call. Useful
         for injecting per-prompt state into wrapper modules (e.g. ControlNet-LLLite cond image).
         Signature: ``on_prompt_start(prompt_dict, accelerator)`` / ``on_prompt_end(prompt_dict)``.
+
+    network:
+        Optional timestep-aware adapter network (T-LoRA / T-GLoKR). When it exposes
+        ``set_current_timestep``, every Euler step feeds it the current sigma so
+        previews match training-time behavior; the value is cleared afterwards.
     """
     if steps == 0:
         if not args.sample_at_first:
@@ -483,30 +497,38 @@ def sample_images(
     except Exception:
         pass
 
-    with torch.no_grad(), accelerator.autocast():
-        for prompt_dict in prompts:
-            dit.prepare_block_swap_before_forward()
-            if on_prompt_start is not None:
-                on_prompt_start(prompt_dict, accelerator)
-            try:
-                _sample_image_inference(
-                    accelerator,
-                    args,
-                    dit,
-                    text_encoder,
-                    vae,
-                    tokenize_strategy,
-                    text_encoding_strategy,
-                    save_dir,
-                    prompt_dict,
-                    epoch,
-                    steps,
-                    sample_prompts_te_outputs,
-                    prompt_replacement,
-                )
-            finally:
-                if on_prompt_end is not None:
-                    on_prompt_end(prompt_dict)
+    try:
+        with torch.no_grad(), accelerator.autocast():
+            for prompt_dict in prompts:
+                dit.prepare_block_swap_before_forward()
+                if on_prompt_start is not None:
+                    on_prompt_start(prompt_dict, accelerator)
+                try:
+                    _sample_image_inference(
+                        accelerator,
+                        args,
+                        dit,
+                        text_encoder,
+                        vae,
+                        tokenize_strategy,
+                        text_encoding_strategy,
+                        save_dir,
+                        prompt_dict,
+                        epoch,
+                        steps,
+                        sample_prompts_te_outputs,
+                        prompt_replacement,
+                        network=network,
+                    )
+                finally:
+                    if on_prompt_end is not None:
+                        on_prompt_end(prompt_dict)
+    finally:
+        # Leave no sampling sigma behind: the next training step must start from
+        # its own injected timesteps, not the last preview step's.
+        clear_ts = getattr(network, "clear_current_timestep", None) if network is not None else None
+        if callable(clear_ts):
+            clear_ts()
 
     # Restore RNG state
     torch.set_rng_state(rng_state)
@@ -531,6 +553,7 @@ def _sample_image_inference(
     steps,
     sample_prompts_te_outputs,
     prompt_replacement,
+    network=None,
 ):
     """Generate a single sample image."""
     prompt = prompt_dict.get("prompt", "")
@@ -634,9 +657,13 @@ def _sample_image_inference(
 
     # Generate sample
     clean_memory_on_device(accelerator.device)
+    # Timestep-aware adapters (T-LoRA rank masking, T-GLoKR time gates) need the
+    # current sigma at every denoising step, mirroring the training-loop injection.
+    set_ts = getattr(network, "set_current_timestep", None) if network is not None else None
     latents = do_sample(
         height, width, seed, dit, crossattn_emb, sample_steps, dit.dtype, accelerator.device, scale, flow_shift, neg_crossattn_emb,
         scheduler=scheduler,
+        timestep_callback=set_ts if callable(set_ts) else None,
     )
 
     # Decode latents

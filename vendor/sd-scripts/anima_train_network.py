@@ -185,7 +185,11 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         return strategy_anima.AnimaTextEncodingStrategy()
 
     def post_process_network(self, args, accelerator, network, text_encoders, unet):
-        pass
+        # Keep a handle on timestep-aware adapters (T-LoRA rank masking, T-GLoKR
+        # time gates) so preview sampling can inject per-step sigmas — including
+        # the sample_at_first run that happens before the first training step.
+        if callable(getattr(network, "set_current_timestep", None)):
+            self._timestep_network = network
 
     def get_models_for_text_encoding(self, args, accelerator, text_encoders):
         if args.cache_text_encoder_outputs:
@@ -252,9 +256,9 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
             text_encoders[0].to(accelerator.device)
 
     def sample_images(self, accelerator, args, epoch, global_step, device, vae, tokenizer, text_encoder, unet):
-        # The training path leaves the last batch's timestep injected (it must
-        # survive until after backward); previews still run with the documented
-        # t=None (g==1) gate fallback.
+        # Clear the training batch's leftover timestep first; sample_images then
+        # injects the actual per-step sigmas into timestep-aware adapters
+        # (T-LoRA rank masking, T-GLoKR time gates) so previews match training.
         self._clear_network_timestep(self._timestep_network)
         text_encoders = text_encoder if isinstance(text_encoder, list) else [text_encoder]  # compatibility
         te = self.get_models_for_text_encoding(args, accelerator, text_encoders)
@@ -273,6 +277,7 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
             tokenize_strategy,
             text_encoding_strategy,
             self.sample_prompts_te_outputs,
+            network=self._timestep_network,
         )
 
     def get_noise_scheduler(self, args: argparse.Namespace, device: torch.device) -> Any:
