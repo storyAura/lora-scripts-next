@@ -404,5 +404,94 @@ class AnimaBackendAdapterTests(unittest.TestCase):
         self.assertNotIn("network_args", adapted)
 
 
+class LoraTypeOverrideTests(unittest.TestCase):
+    """Stale network_module / lycoris_algo left over from another lora_type branch
+    (the schema keeps them tolerant so the frontend union survives switching)
+    must never leak into training — the adapter derives both from lora_type."""
+
+    @staticmethod
+    def _arg_value(network_args, key):
+        for item in network_args:
+            k, _, v = str(item).partition("=")
+            if k.strip() == key:
+                return v.strip()
+        return None
+
+    def test_stale_lycoris_module_corrected_for_tlora(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "lora_type": "tlora",
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glokr",
+                "tlora_min_rank": 4,
+            }
+        )
+        self.assertEqual(adapted["network_module"], "networks.tlora_anima")
+        self.assertEqual(self._arg_value(adapted.get("network_args", []), "tlora_min_rank"), "4")
+        self.assertNotIn("algo=glokr", adapted.get("network_args", []))
+        self.assertTrue(any("networks.tlora_anima" in w for w in warnings))
+
+    def test_stale_algo_corrected_when_switching_lycoris_types(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "lora_type": "bokr",
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glokr",
+            }
+        )
+        self.assertEqual(adapted["network_module"], "lycoris.kohya")
+        self.assertEqual(self._arg_value(adapted["network_args"], "algo"), "bokr")
+        self.assertTrue(any("bokr" in w for w in warnings))
+
+    def test_stale_plain_lora_module_corrected_for_glokr(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "lora_type": "glokr",
+                "network_module": "networks.lora_anima",
+            }
+        )
+        self.assertEqual(adapted["network_module"], "lycoris.kohya")
+        self.assertEqual(self._arg_value(adapted["network_args"], "algo"), "glokr")
+
+    def test_tglokr_derives_glokr_algo_and_time_gates(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "lora_type": "tglokr",
+                "network_module": "networks.lora_anima",
+                "lycoris_algo": "lokr",
+            }
+        )
+        self.assertEqual(adapted["network_module"], "lycoris.kohya")
+        args = adapted["network_args"]
+        self.assertEqual(self._arg_value(args, "algo"), "glokr")
+        self.assertEqual(self._arg_value(args, "train_time_gates"), "True")
+
+    def test_matching_values_produce_no_warnings(self):
+        _, warnings = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "lora_type": "glokr",
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glokr",
+            }
+        )
+        self.assertEqual([w for w in warnings if "不符" in w], [])
+
+    def test_missing_lora_type_keeps_form_values(self):
+        adapted, _ = adapt_anima_config(
+            {
+                "pretrained_model_name_or_path": "model.safetensors",
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "lokr",
+            }
+        )
+        self.assertEqual(adapted["network_module"], "lycoris.kohya")
+        self.assertEqual(self._arg_value(adapted["network_args"], "algo"), "lokr")
+
+
 if __name__ == "__main__":
     unittest.main()

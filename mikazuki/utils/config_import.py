@@ -463,7 +463,7 @@ _LYCORIS_ALGO_TO_LORA_TYPE = {
 # plus the TOML preview go blank. Deriving them from lora_type server-side lets
 # the frontend merge override the poisoned default. Keep in sync with
 # mikazuki/schema/sd3-lora.ts branch consts.
-_ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
+ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
     "lora": {"network_module": "networks.lora_anima"},
     "lora_fa": {"network_module": "networks.lora_anima"},
     "vera": {"network_module": "networks.lora_anima"},
@@ -595,7 +595,7 @@ def _apply_anima_lora_type_consts(config: dict) -> None:
         )
         if recovered:
             config["lora_type"] = lora_type = recovered
-    consts = _ANIMA_LORA_TYPE_BRANCH_CONSTS.get(lora_type)
+    consts = ANIMA_LORA_TYPE_BRANCH_CONSTS.get(lora_type)
     if consts:
         config.update(consts)
 

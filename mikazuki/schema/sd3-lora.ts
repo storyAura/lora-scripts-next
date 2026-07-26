@@ -67,7 +67,7 @@ Schema.intersect([
         Schema.union([
             Schema.object({
                 lora_type: Schema.const("lora").default("lora"),
-                network_module: Schema.const("networks.lora_anima").default("networks.lora_anima").hidden(),
+                network_module: Schema.string().default("networks.lora_anima").hidden(),
                 network_dropout: Schema.number().step(0.01).default(0).description("LoRA dropout 概率"),
                 pissa_init: Schema.boolean().default(false).description("启用 PiSSA 初始化（实验性，仅 LoRA 生效）"),
                 lycoris_algo: Schema.string().hidden(),
@@ -76,8 +76,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("lokr").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("lokr").default("lokr").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("lokr").hidden(),
                 lokr_factor: Schema.number().min(-1).default(-1).description("LoKr 分解因子。常用 4~无穷，填写 -1 为无穷"),
                 full_matrix: Schema.boolean().default(false).description("使用全矩阵模式（高风险）。开启后系统会自动启用保守稳定性护栏：可训练权重保持 FP32，并默认 scale_weight_norms=1"),
                 use_cp: Schema.boolean().default(false).description("使用 CP 分解"),
@@ -96,8 +96,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("glokr").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("glokr").default("glokr").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("glokr").hidden(),
                 kron_rank: Schema.number().min(1).step(1).default(2).description("Kronecker 项求和数。多项求和可打破单项分解的僵硬谱形，画风训练推荐 2~4；1 为经典单项模式"),
                 use_bora: Schema.boolean().default(true).description("BoRA 双向（行/列）权重解耦，画风训练推荐开启。开启后无需再开下方 dora_wd"),
                 bora_iters: Schema.number().min(1).step(1).default(2).description("BoRA 行/列交替平衡迭代次数，推荐 2~3；1 为单次平衡（原始行为）"),
@@ -122,8 +122,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("tglokr").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("glokr").default("glokr").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("glokr").hidden(),
                 train_time_gates: Schema.boolean().default(true).hidden(),
                 time_gate_dim: Schema.number().min(1).step(1).default(4).description("时间门控的正弦编码频率数 K。K 越大越能表达复杂的时段曲线，参数量每模块 3×(2K+1)，默认 4 足够"),
                 kron_rank: Schema.number().min(1).step(1).default(2).description("Kronecker 项求和数。多项求和可打破单项分解的僵硬谱形，画风训练推荐 2~4；1 为经典单项模式"),
@@ -148,8 +148,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("bokr").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("bokr").default("bokr").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("bokr").hidden(),
                 dora_wd: Schema.boolean().default(true).description("启用 BoRA 双向（行+列）权重解耦——BoKR 的核心，推荐保持开启；关闭则退化为普通 LoKr"),
                 lokr_factor: Schema.number().min(-1).default(-1).description("Kronecker 分解因子，与 LoKr 相同。-1 为最均衡分解"),
                 use_scalar: Schema.boolean().default(false).description("使用可学习全局缩放（0.01 起步）替代零初始化"),
@@ -165,8 +165,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("bora").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("bora").default("bora").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("bora").hidden(),
                 dora_wd: Schema.boolean().default(true).description("启用 BoRA 双向（行+列）幅值解耦——BoRA 的核心，推荐保持开启；关闭则退化为普通 LoRA。与 bypass 模式互斥"),
                 use_scalar: Schema.boolean().default(false).description("使用可学习全局缩放（0.01 起步）替代零初始化"),
                 rank_dropout: Schema.number().step(0.01).min(0).max(1).description("rank dropout 概率。画风训练建议 0"),
@@ -179,8 +179,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("gsokr").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("gsokr").default("gsokr").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("gsokr").hidden(),
                 use_sora: Schema.boolean().default(true).description("SoRA 稀疏化门控——GloKrSora 的核心，训练中自动裁剪低贡献 rank；关闭则退化为 GLoKR 基础形态"),
                 sora_r: Schema.number().min(1).step(1).default(4).description("SoRA 稀疏门控的 rank 数"),
                 sora_epsilon: Schema.number().default(0.00001).description("SoRA 数值稳定项 ε，一般无需修改"),
@@ -197,8 +197,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("glora_boft").required(),
-                network_module: Schema.const("lycoris.kohya").default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.const("glora_boft").default("glora_boft").hidden(),
+                network_module: Schema.string().default("lycoris.kohya").hidden(),
+                lycoris_algo: Schema.string().default("glora_boft").hidden(),
                 boft_constraint: Schema.number().min(0).default(0).description("BOFT 正交约束强度（COFT 半径）。0 = 不启用约束"),
                 boft_rescaled: Schema.boolean().default(false).description("启用 rescaled 正交变换（对正交旋转附加可学习缩放）"),
                 use_scalar: Schema.boolean().default(false).description("使用可学习全局缩放（0.01 起步）替代零初始化"),
@@ -213,7 +213,7 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("tlora").required(),
-                network_module: Schema.const("networks.tlora_anima").default("networks.tlora_anima").hidden(),
+                network_module: Schema.string().default("networks.tlora_anima").hidden(),
                 network_dropout: Schema.number().step(0.01).default(0).description("T-LoRA dropout 概率。T-LoRA 自带 rank masking 正则化，一般保持 0 即可"),
                 tlora_min_rank: Schema.number().min(1).default(4).description("T-LoRA 最小动态 rank。决定高噪声 timestep 下的最低有效维度，建议 ≥ network_dim/8"),
                 tlora_rank_schedule: Schema.union(["cosine", "linear"]).default("cosine").description("T-LoRA 动态 rank 调度。cosine 更平滑（推荐），linear 更激进"),
@@ -225,7 +225,7 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("lora_fa").required(),
-                network_module: Schema.const("networks.lora_anima").default("networks.lora_anima").hidden(),
+                network_module: Schema.string().default("networks.lora_anima").hidden(),
                 network_dropout: Schema.number().step(0.01).default(0).description("LoRA-FA dropout 概率。⚠ 当前版本 LoRA-FA 尚未接入独立实现，实际训练行为等同标准 LoRA"),
                 pissa_init: Schema.boolean().hidden(),
                 lycoris_algo: Schema.string().hidden(),
@@ -234,7 +234,7 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("vera").required(),
-                network_module: Schema.const("networks.lora_anima").default("networks.lora_anima").hidden(),
+                network_module: Schema.string().default("networks.lora_anima").hidden(),
                 network_dropout: Schema.number().step(0.01).default(0).description("VeRA dropout 概率。⚠ 当前版本 VeRA 尚未接入独立实现，实际训练行为等同标准 LoRA"),
                 pissa_init: Schema.boolean().hidden(),
                 lycoris_algo: Schema.string().hidden(),
@@ -243,7 +243,7 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("loha").required(),
-                network_module: Schema.const("networks.loha").default("networks.loha").hidden(),
+                network_module: Schema.string().default("networks.loha").hidden(),
                 network_dropout: Schema.number().step(0.01).default(0).description("LoHa dropout 概率"),
                 pissa_init: Schema.boolean().hidden(),
                 lycoris_algo: Schema.string().hidden(),

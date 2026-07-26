@@ -5,6 +5,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from mikazuki.utils.config_import import ANIMA_LORA_TYPE_BRANCH_CONSTS
+
 
 SUPPORTED_FIELDS = {
     "pretrained_model_name_or_path",
@@ -300,6 +302,39 @@ def _apply_lr_fallback(source: dict[str, Any]) -> None:
             source[key] = learning_rate
 
 
+def _apply_lora_type_overrides(source: dict[str, Any], warnings: list[str]) -> None:
+    """Derive network_module / lycoris_algo from lora_type, ignoring stale form values.
+
+    The schema keeps these fields tolerant (a leftover value from another
+    lora_type branch must not break the frontend union), so the adapter is the
+    authority: whatever the form carried, training always gets the module and
+    algo that belong to the selected lora_type.
+    """
+    lora_type = str(source.get("lora_type") or "").strip().lower()
+    consts = ANIMA_LORA_TYPE_BRANCH_CONSTS.get(lora_type)
+    if not consts:
+        return
+
+    expected_module = consts["network_module"]
+    current_module = str(source.get("network_module") or "").strip()
+    if current_module and current_module != expected_module:
+        warnings.append(
+            f"network_module={current_module} 与 lora_type={lora_type} 不符，已改为 {expected_module}"
+        )
+    source["network_module"] = expected_module
+
+    expected_algo = consts.get("lycoris_algo")
+    if expected_algo:
+        current_algo = str(source.get("lycoris_algo") or "").strip().lower()
+        if current_algo and current_algo != expected_algo:
+            warnings.append(
+                f"lycoris_algo={current_algo} 与 lora_type={lora_type} 不符，已改为 {expected_algo}"
+            )
+        source["lycoris_algo"] = expected_algo
+    else:
+        source.pop("lycoris_algo", None)
+
+
 def _network_args_use_lokr(network_args: list[str]) -> bool:
     for item in network_args:
         if not isinstance(item, str) or "=" not in item:
@@ -365,6 +400,7 @@ def adapt_anima_config(
             source.pop("network_args", None)
 
         _apply_lr_fallback(source)
+        _apply_lora_type_overrides(source, warnings)
 
     # LyCORIS default preset does not include Anima module class names, which may
     # produce zero trainable modules for LoKr. Inject Anima-specific preset unless
