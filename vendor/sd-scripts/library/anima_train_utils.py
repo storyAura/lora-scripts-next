@@ -301,6 +301,46 @@ def save_anima_model_on_epoch_end_or_stepwise(
 
 
 # Sampling (Euler discrete for rectified flow)
+def _beta_ppf(q: np.ndarray, alpha: float, beta: float) -> np.ndarray:
+    """Inverse CDF of Beta(alpha, beta), midpoint-rule grid inversion.
+
+    scipy-free on purpose (scipy is not a repo dependency). Midpoint sampling
+    sidesteps the integrable endpoint singularities for alpha/beta < 1.
+    """
+    # ponytail: 4096-cell numeric inversion (~1e-3 abs error) — swap for
+    # scipy.stats.beta.ppf if scipy ever becomes a hard dependency.
+    edges = np.linspace(0.0, 1.0, 4097, dtype=np.float64)
+    mids = (edges[:-1] + edges[1:]) / 2.0
+    pdf = mids ** (alpha - 1.0) * (1.0 - mids) ** (beta - 1.0)
+    cdf = np.concatenate(([0.0], np.cumsum(pdf)))
+    cdf /= cdf[-1]
+    return np.interp(q, cdf, edges)
+
+
+def get_sample_sigmas(steps: int, flow_shift: float, scheduler: str = "simple") -> torch.Tensor:
+    """Build the preview sigma schedule: (steps + 1,) fp32 tensor, 1.0 -> 0.0.
+
+    "simple" spaces timesteps uniformly; "beta" spaces them by the Beta(0.6, 0.6)
+    inverse CDF (ComfyUI's beta scheduler), concentrating steps near both ends.
+    flow_shift is applied after spacing, matching ComfyUI's scheduler -> model
+    shift composition.
+
+    Built in fp32 — a bf16 schedule quantizes 30-step dt (~0.033) at ~0.004
+    granularity, visibly degrading preview quality.
+    """
+    if scheduler == "beta":
+        # ComfyUI BetaSamplingScheduler defaults: alpha = beta = 0.6.
+        ts = 1.0 - np.linspace(0.0, 1.0, steps, endpoint=False)
+        base = np.append(_beta_ppf(ts, 0.6, 0.6), 0.0)
+        sigmas = torch.from_numpy(base.astype(np.float32))
+    else:
+        sigmas = torch.linspace(1.0, 0.0, steps + 1, dtype=torch.float32)
+    flow_shift = float(flow_shift)
+    if flow_shift != 1.0:
+        sigmas = (sigmas * flow_shift) / (1 + (flow_shift - 1) * sigmas)
+    return sigmas
+
+
 def do_sample(
     height: int,
     width: int,
@@ -313,6 +353,7 @@ def do_sample(
     guidance_scale: float = 1.0,
     flow_shift: float = 3.0,
     neg_crossattn_emb: Optional[torch.Tensor] = None,
+    scheduler: str = "simple",
 ) -> torch.Tensor:
     """Generate a sample using Euler discrete sampling for rectified flow.
 
@@ -327,6 +368,7 @@ def do_sample(
         guidance_scale: CFG scale (1.0 = no guidance)
         flow_shift: Flow shift parameter for rectified flow
         neg_crossattn_emb: Negative cross-attention embeddings for CFG
+        scheduler: Timestep spacing, "simple" (uniform) or "beta" (Beta(0.6, 0.6))
 
     Returns:
         Denoised latents
@@ -343,13 +385,8 @@ def do_sample(
         generator = None
     noise = torch.randn(latent_size, dtype=torch.float32, generator=generator, device="cpu").to(dtype).to(device)
 
-    # Timestep schedule: linear from 1.0 to 0.0.
-    # Build in fp32 — a bf16 schedule quantizes 30-step dt (~0.033) at ~0.004 granularity,
-    # visibly degrading preview quality. Values are cast where the model needs them.
-    sigmas = torch.linspace(1.0, 0.0, steps + 1, device=device, dtype=torch.float32)
-    flow_shift = float(flow_shift)
-    if flow_shift != 1.0:
-        sigmas = (sigmas * flow_shift) / (1 + (flow_shift - 1) * sigmas)
+    # Timestep schedule (fp32, see get_sample_sigmas). Values are cast where the model needs them.
+    sigmas = get_sample_sigmas(steps, flow_shift, scheduler).to(device)
 
     # Start from pure noise
     x = noise.clone()
@@ -504,6 +541,10 @@ def _sample_image_inference(
     scale = prompt_dict.get("scale", 7.5)
     seed = prompt_dict.get("seed")
     flow_shift = prompt_dict.get("flow_shift", 3.0)
+    scheduler = str(prompt_dict.get("scheduler", "simple")).strip().lower() or "simple"
+    if scheduler not in ("simple", "beta"):
+        logger.warning(f"unknown scheduler '{scheduler}' in sample prompt, falling back to 'simple'")
+        scheduler = "simple"
 
     if prompt_replacement is not None:
         prompt = prompt.replace(prompt_replacement[0], prompt_replacement[1])
@@ -518,7 +559,8 @@ def _sample_image_inference(
     width = max(64, width - width % 16)
 
     logger.info(
-        f"  prompt: {prompt}, size: {width}x{height}, steps: {sample_steps}, scale: {scale}, flow_shift: {flow_shift}, seed: {seed}"
+        f"  prompt: {prompt}, size: {width}x{height}, steps: {sample_steps}, scale: {scale}, "
+        f"flow_shift: {flow_shift}, scheduler: {scheduler}, seed: {seed}"
     )
 
     # Encode prompt
@@ -593,7 +635,8 @@ def _sample_image_inference(
     # Generate sample
     clean_memory_on_device(accelerator.device)
     latents = do_sample(
-        height, width, seed, dit, crossattn_emb, sample_steps, dit.dtype, accelerator.device, scale, flow_shift, neg_crossattn_emb
+        height, width, seed, dit, crossattn_emb, sample_steps, dit.dtype, accelerator.device, scale, flow_shift, neg_crossattn_emb,
+        scheduler=scheduler,
     )
 
     # Decode latents

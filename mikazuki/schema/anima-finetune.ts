@@ -121,7 +121,7 @@ Schema.intersect([
                 sample_seed: Schema.number().default(42).description("预览图种子"),
                 sample_steps: Schema.number().min(1).max(300).default(40).description("推理步数"),
                 sample_sampler: Schema.union(["euler", "k_euler"]).default("euler").description("Anima 训练预览采样器"),
-                sample_scheduler: Schema.union(["simple"]).default("simple").description("Anima 预览调度器"),
+                sample_scheduler: Schema.union(["simple", "beta"]).default("simple").description("Anima 预览调度器。simple=均匀步长；beta=ComfyUI 同款 Beta(0.6,0.6) 调度，采样步集中在首尾两端，细节表现通常更好"),
                 sample_at_first: Schema.boolean().default(true).description("训练开始前生成 step 0 预览图"),
                 sample_every_n_epochs: Schema.number().default(2).description("每 N 个 epoch 生成一次预览图"),
             }),

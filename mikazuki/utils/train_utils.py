@@ -20,6 +20,7 @@ PREVIEW_UI_FIELDS = (
     "sample_seed",
     "sample_steps",
     "sample_sampler",
+    "sample_scheduler",
     "randomly_choice_prompt",
     "sample_at_first",
     "sample_every_n_epochs",
@@ -184,6 +185,7 @@ def build_sample_prompt_line(
     steps: int = 24,
     seed: int = 2333,
     sampler: str | None = None,
+    scheduler: str | None = None,
 ) -> str:
     positive = normalize_sample_prompt_text(positive)
     negative = normalize_sample_prompt_text(negative)
@@ -193,6 +195,8 @@ def build_sample_prompt_line(
     )
     if sampler:
         line += f" --ss {normalize_sample_prompt_text(sampler)}"
+    if scheduler:
+        line += f" --sch {normalize_sample_prompt_text(scheduler)}"
     return line
 
 

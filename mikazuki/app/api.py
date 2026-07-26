@@ -231,6 +231,7 @@ def get_sample_prompts(config: dict, model_train_type: str = "sd-lora") -> Tuple
     sample_seed = config.pop('sample_seed', default_seed)
     sample_steps = config.pop('sample_steps', default_steps)
     sample_sampler = config.pop('sample_sampler', None)
+    sample_scheduler = config.pop('sample_scheduler', None)
     randomly_choice_prompt = config.pop('randomly_choice_prompt', False)
 
     if randomly_choice_prompt:
@@ -256,6 +257,7 @@ def get_sample_prompts(config: dict, model_train_type: str = "sd-lora") -> Tuple
         steps=sample_steps,
         seed=sample_seed,
         sampler=sample_sampler if use_anima_defaults else None,
+        scheduler=sample_scheduler if use_anima_defaults else None,
     )
     return positive_prompts, sample_prompts_arg
 
