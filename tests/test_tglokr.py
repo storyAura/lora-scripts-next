@@ -10,9 +10,11 @@ Covers:
 - state_dict round-trip carries time_gate keys; old archives load fine without them
 - UI field -> adapter -> network_args -> real module construction
 """
+import ast
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -20,6 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "vendor" / "sd-scripts"))
 
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint as torch_ckpt
 
 from mikazuki.anima_backend.adapter import adapt_anima_config
 
@@ -379,6 +382,116 @@ class AdapterForwardingTests(unittest.TestCase):
         net, _ = _build_glokr({"train_time_gates": args["train_time_gates"], "time_gate_dim": args["time_gate_dim"]})
         m0 = net.unet_loras[0]
         self.assertEqual(m0.time_gate_w.shape, (3, 12))  # 2K with K=6
+
+
+class GradientCheckpointRecomputeTests(unittest.TestCase):
+    """CheckpointError 回归：backward 里的重算前向必须看到与首次前向相同的 t。
+
+    旧训练循环在 forward 一结束就清空 current_timestep；gradient checkpointing
+    在 backward 中重演前向时 _time_gate 走 t=None (g≡1) 回退分支，保存张量数
+    少于首次前向 → torch.utils.checkpoint.CheckpointError（线上 1262 vs 1134）。
+    """
+
+    def _one_step(self, clear_before_backward):
+        net, dit = _build_glokr({"train_time_gates": "True", "time_gate_dim": "4"})
+        _perturb(net)
+        x = torch.randn(2, DIM)
+        net.set_current_timestep(torch.tensor([500.0, 500.0]))
+        h = x
+        for block in dit.blocks:
+            h = torch_ckpt.checkpoint(block, h, use_reentrant=False)
+        loss = h.sum()
+        if clear_before_backward:
+            net.clear_current_timestep()
+        loss.backward()
+
+    def test_old_behavior_clearing_t_breaks_recomputation(self):
+        # 守住"测试抓得到原 bug"：提前清空必须触发 CheckpointError
+        with self.assertRaises(torch_ckpt.CheckpointError):
+            self._one_step(clear_before_backward=True)
+
+    def test_keeping_t_alive_through_backward_passes(self):
+        self._one_step(clear_before_backward=False)  # must not raise
+
+
+class _FakeTimestepNetwork:
+    def __init__(self):
+        self.current_timestep = "leftover"
+        self.cleared = 0
+
+    def set_current_timestep(self, t):
+        self.current_timestep = t
+
+    def clear_current_timestep(self):
+        self.cleared += 1
+        self.current_timestep = None
+
+
+class TrainerTimestepLifecycleTests(unittest.TestCase):
+    """训练器侧：训练路径保留注入的 t 到 backward 之后，采样入口清残留。"""
+
+    @staticmethod
+    def _import_trainer_module():
+        import anima_train_network  # vendor/sd-scripts is on sys.path
+
+        return anima_train_network
+
+    def test_clear_helper_prefers_clear_hook_then_setter(self):
+        atn = self._import_trainer_module()
+        clear = atn.AnimaNetworkTrainer._clear_network_timestep
+
+        both = _FakeTimestepNetwork()
+        clear(both)
+        self.assertEqual(both.cleared, 1)
+        self.assertIsNone(both.current_timestep)
+
+        class OnlySetter:
+            def __init__(self):
+                self.current_timestep = "leftover"
+
+            def set_current_timestep(self, t):
+                self.current_timestep = t
+
+        setter_only = OnlySetter()
+        clear(setter_only)
+        self.assertIsNone(setter_only.current_timestep)
+
+        clear(None)  # must not raise
+        clear(object())  # hookless network: must not raise
+
+    def test_sample_images_clears_leftover_timestep(self):
+        atn = self._import_trainer_module()
+        trainer = atn.AnimaNetworkTrainer()
+        fake = _FakeTimestepNetwork()
+        trainer._timestep_network = fake
+
+        with mock.patch.object(atn.anima_train_utils, "sample_images") as sampler, \
+                mock.patch.object(atn.strategy_base.TextEncodingStrategy, "get_strategy", return_value=None), \
+                mock.patch.object(atn.strategy_base.TokenizeStrategy, "get_strategy", return_value=None), \
+                mock.patch.object(trainer, "get_models_for_text_encoding", return_value=None):
+            trainer.sample_images(None, None, 0, 0, None, None, None, [], None)
+
+        self.assertIsNone(fake.current_timestep, "preview must run with the t=None gate fallback")
+        self.assertEqual(fake.cleared, 1)
+        sampler.assert_called_once()
+
+    def test_finally_cleanup_is_guarded_by_is_train(self):
+        src = (PROJECT_ROOT / "vendor" / "sd-scripts" / "anima_train_network.py").read_text(encoding="utf-8")
+        fn = next(
+            node
+            for node in ast.walk(ast.parse(src))
+            if isinstance(node, ast.FunctionDef) and node.name == "get_noise_pred_and_target"
+        )
+        tries = [t for t in ast.walk(fn) if isinstance(t, ast.Try) and t.finalbody]
+        self.assertTrue(tries, "get_noise_pred_and_target must keep its try/finally")
+        for t in tries:
+            dump = " ".join(ast.dump(stmt) for stmt in t.finalbody)
+            self.assertIn(
+                "'is_train'",
+                dump,
+                "the finally cleanup must stay gated on is_train, or gradient "
+                "checkpointing recomputation diverges (CheckpointError)",
+            )
 
 
 if __name__ == "__main__":

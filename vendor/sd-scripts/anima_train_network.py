@@ -34,6 +34,20 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
     def __init__(self):
         super().__init__()
         self.sample_prompts_te_outputs = None
+        self._timestep_network = None  # timestep-aware network that still holds an injected t
+
+    @staticmethod
+    def _clear_network_timestep(network):
+        """Reset the timestep injected into timestep-aware adapters; no-op without the hooks."""
+        if network is None:
+            return
+        clear_ts = getattr(network, "clear_current_timestep", None)
+        if callable(clear_ts):
+            clear_ts()
+            return
+        set_ts = getattr(network, "set_current_timestep", None)
+        if callable(set_ts):
+            set_ts(None)
 
     def assert_extra_args(
         self,
@@ -238,6 +252,10 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
             text_encoders[0].to(accelerator.device)
 
     def sample_images(self, accelerator, args, epoch, global_step, device, vae, tokenizer, text_encoder, unet):
+        # The training path leaves the last batch's timestep injected (it must
+        # survive until after backward); previews still run with the documented
+        # t=None (g==1) gate fallback.
+        self._clear_network_timestep(self._timestep_network)
         text_encoders = text_encoder if isinstance(text_encoder, list) else [text_encoder]  # compatibility
         te = self.get_models_for_text_encoding(args, accelerator, text_encoders)
         qwen3_te = te[0] if te is not None else None
@@ -327,6 +345,7 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         set_ts = getattr(target_network, "set_current_timestep", None)
         if callable(set_ts):
             set_ts(timesteps)
+            self._timestep_network = target_network
 
         # Call model
         noisy_model_input = noisy_model_input.unsqueeze(2)  # 4D to 5D, [B, C, H, W] -> [B, C, 1, H, W]
@@ -342,12 +361,14 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
                     source_attention_mask=attn_mask,
                 )
         finally:
-            if callable(set_ts):
-                clear_ts = getattr(target_network, "clear_current_timestep", None)
-                if callable(clear_ts):
-                    clear_ts()
-                else:
-                    set_ts(None)
+            # Do NOT clear during training: gradient checkpointing re-runs this
+            # forward inside backward(), where the time gates must read the same
+            # timestep again — clearing here sends the recomputation down the
+            # t=None (g==1) fallback, fewer tensors get saved than in the original
+            # pass and torch raises CheckpointError. The next step's set_ts
+            # overwrites the value; sample_images() clears the leftover.
+            if callable(set_ts) and not is_train:
+                self._clear_network_timestep(target_network)
         model_pred = model_pred.squeeze(2)  # 5D to 4D, [B, C, 1, H, W] -> [B, C, H, W]
 
         # Rectified flow target: noise - latents
