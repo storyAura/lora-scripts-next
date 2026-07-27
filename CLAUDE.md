@@ -34,8 +34,9 @@ python scripts/bump_spa_asset_cache_key.py         # after editing frontend/dist
 ### Known-failing tests (pre-existing, not your change)
 
 `test_anima_backend_upstream` (3, expects `vendor/sd-scripts` to be a git submodule),
-`test_anima_fast_integration_static` (3, pins a stale cache key / VERSION 2.9.0 vs dist 2.8.35).
-Verify against a clean checkout before assuming you broke something.
+`test_anima_fast_integration_static` (3, pins a stale cache key and VERSION 2.8.35 vs current).
+Full-suite baseline as of v2.9.1: **6 failures + 4 errors + 1 skipped** (the errors are the
+pytest-style modules above). Anything beyond that count is your change.
 
 ## Architecture
 
@@ -174,9 +175,13 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 ### Runtime plumbing worth knowing
 
 - **Tasks**: `mikazuki/tasks.py`, singleton `tm`, `max_concurrent=1` — one training at a time.
-  In-memory only (lost on restart). `GET /api/tasks`, `GET /api/tasks/terminate/{id}`.
-- **Log streaming**: `mikazuki/train_log_hub.py` keeps a ring buffer per task;
-  `GET /api/train/log/stream/{task_id}` is SSE. The main API does **not** log every request,
+  In-memory only (lost on restart); only the most recent 16 finished tasks are retained, older
+  ones are pruned together with their log buffers (long sessions stay memory-bounded).
+  `GET /api/tasks`, `GET /api/tasks/terminate/{id}`.
+- **Log streaming**: `mikazuki/train_log_hub.py` keeps a 15000-line ring buffer per task;
+  `GET /api/train/log/stream/{task_id}` is SSE. Snapshot cursors are **absolute** appended-line
+  counts so streaming survives ring wrap-around — keep that invariant
+  (`tests/test_train_log_hub.py` guards it). The main API does **not** log every request,
   so an absent console line does not mean the request never arrived.
 - **Subprocess env**: `process.py` sets `PYTORCH_CUDA_ALLOC_CONF` per platform
   (`expandable_segments` is unsupported on Windows), injects `PYTHONPATH`, disables color.
@@ -185,6 +190,18 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 
 ## Repo conventions
 
+- Remote: `origin` = `storyAura/lora-scripts-story-next` (this fork; commit to `main` and push
+  directly, no PRs). Links to `wochenlong/lora-scripts-next` — issues, releases, `GITHUB_REPO`
+  in `mikazuki/update_check.py`, portable updater URLs — point at the **upstream** on purpose:
+  that is where the referenced issues and release packages live. Do not "fix" them.
+- Cutting a version touches four places in one commit: `VERSION` (feeds the sidebar chip via
+  `/api/version`), `CHANGELOG.md`, the changelog tables in **both** `README.md` and
+  `README-zh.md` (bilingual pair — always edit both), and the WebUI 「其他 → 更新日志」 page.
+  That page is SSR + hydration: insert *identical* HTML into
+  `frontend/dist/other/changelog.html` **and** the template string in
+  `frontend/dist/assets/changelog.html.e5f6a7b8.js`, then bump the SPA cache key. Never rerun
+  `scripts/patch-home-changelog.py` — it regenerates the page from content baked in at v2.8.2
+  and clobbers every newer entry.
 - `docs/` (plural, tracked) = public docs. `doc/` (singular, **gitignored**) = local agent
   handover notes — `doc/local/AGENT_INTERNAL.md` is the entry point, indexed by
   `.cursor/rules/local-docs-index.mdc`. Same split for `scripts/` (tracked) vs `script/` (ignored).
