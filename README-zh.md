@@ -112,6 +112,8 @@ bash install_flash_attn.sh
 
 训练启动后自动打开监控页（默认端口 6008，可自动回退），GPU 状态、训练参数、Loss 曲线、预览图、日志一站式查看。
 
+**为长时间训练加固（v2.9.1）**：日志直播超过 1.5 万行不再断更；任务与日志历史占用有上限，挂机多天不再越吃越多内存；监控页 TensorBoard 曲线解析带缓存。
+
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png" alt="训练监控仪表盘" width="920" />
 </p>
@@ -268,6 +270,8 @@ powershell -ExecutionPolicy Bypass -File .\install-cn.ps1
 
 | 日期 | 版本 |
 |------|------|
+| 2026-07-27 | **v2.9.1** — 长驻稳定性：日志直播超 1.5 万行不断更、任务/日志历史有界、监控 TensorBoard 解析缓存；**T-GLoKR** 时间步门控算法、预览 Beta 调度器、lora_type 表单修复 · 见 [CHANGELOG.md](CHANGELOG.md) |
+| 2026-07-22 | **v2.9.0** — Anima Fast 桶分辨率控制、LoKr 配置预览修复、本地打标模型离线优先、整合包数据目录 junction |
 | 2026-06-27 | **v2.8.2** — 整合包：**SDXL 训练**、**打标**、**预览图**、**训练配置导入** 四项修复；内置打标模型与 SDXL tokenizer 缓存 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-05-28 | **v2.7.0** — **Anima LoRA Fast 模式**（可选 `anima_lora` 插件）：WebUI 入口、页内安装、训练监控同步、性能对标与用户文档 · 见 [`docs/anima-fast.md`](docs/anima-fast.md) |
 | 2026-05-28 | **v2.6.0** — **Anima 全量微调** WebUI（`anima-finetune`）、`anima_train.py` 封装、全量微调导航、监控类型修正；约 24GB 显存参考 |

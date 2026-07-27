@@ -1,6 +1,32 @@
 # 更新日志
 
-本文件记录 **wochenlong/lora-scripts-next** 面向镜像与 AutoDL 的发行说明；上游 kohya-ss/sd-scripts 的变更请见其仓库。
+本文件记录 **storyAura/lora-scripts-story-next** 的发行说明（v2.9.0 及更早条目沿袭上游 wochenlong/lora-scripts-next）；kohya-ss/sd-scripts 的变更请见其仓库。
+
+---
+## v2.9.1 — 2026-07-27
+
+### 稳定性：长驻服务内存保险
+
+- **训练日志直播不再断更**：SSE 游标改为绝对行号，日志超过 15000 行（环形缓冲写满）后 `/train-log` 与监控页继续收到新行；日志页面仅保留最近 5000 行 DOM，超长训练不再拖垮浏览器。
+- **任务历史有界**：只保留最近 16 个已结束任务，对应日志缓冲随之释放，连续多次训练不再累积内存。
+- **监控页轻量化**：TensorBoard Loss 曲线按事件文件缓存解析结果，文件未变化不再每次轮询全量重读；单次载入上限 10000 条。
+- 标签编辑器 WebSocket 代理单侧断开即拆除整对连接，不再遗留挂死连接。
+
+### 训练与预览
+
+- **T-GLoKR**：时间步门控算法 + timestep 供给管线，`tglokr` 升为独立 LoRA 类型（顺带修活 T-LoRA）；魔改 LyCORIS 纳入 `vendor/lycoris` 并加漂移检测。
+- **训练链路审查**：修复 6 个训练 bug、落地 5 项显存/IO 优化（caption dropout NaN、cpu_offload 设备崩溃、bf16 时间步等），防回归测试见 `tests/test_anima_training_fixes.py`。
+- **预览采样**：新增 Beta 调度器（ComfyUI 同款 Beta(0.6,0.6)）；预览逐步注入时间步，T-LoRA / T-GLoKR 预览图与训练行为一致。
+- `attn_mode` 新增 `mem_efficient`（PyTorch Efficient SDPA）。
+
+### 配置与 UI
+
+- 修复 lora_type 切换 / 读取历史参数时残留 `network_module`、`lycoris_algo` 导致表单消失、提交必败的问题；训练值由 adapter 权威派生。
+- 本地扩展 LyCORIS 算法参数全部可视化，默认即推荐配置；帮助菜单新增「训练算法说明」「训练参数说明」站内页面。
+
+### 项目
+
+- 仓库与项目更名为 **lora-scripts-story-next**（个人分支，便于与上游 wochenlong/lora-scripts-next 区分）。
 
 ---
 ## v2.9.0 — 2026-07-22

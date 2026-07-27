@@ -112,6 +112,8 @@ Python **3.10** recommended. See [Flash Attention 2 docs](docs/flash-attention.m
 
 Automatically opens a monitor page (port 6008) when training starts — GPU stats, training parameters, Loss curves, preview samples, and logs all in one dashboard.
 
+**Hardened for long runs (v2.9.1):** live log streaming keeps flowing past 15,000 lines, task/log history is memory-bounded so multi-day sessions don't accumulate RAM, and TensorBoard curve parsing is cached between polls.
+
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png" alt="Train Monitor Dashboard" width="920" />
 </p>
@@ -177,6 +179,8 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 
 | Date | Version |
 |------|---------|
+| 2026-07-27 | **v2.9.1** — Long-run stability: SSE log stream keeps flowing past 15k lines, bounded task/log history, cached monitor TensorBoard parsing; **T-GLoKR** timestep-gated algo, Beta preview scheduler, lora_type form fixes · see [CHANGELOG.md](CHANGELOG.md) |
+| 2026-07-22 | **v2.9.0** — Anima Fast bucket-resolution controls, LoKr config preview fixes, offline-first local tagger models, portable data-dir junctions |
 | 2026-06-27 | **v2.8.2** — Portable pack: **SDXL training**, **tagging**, **preview images**, **config import** fixes; bundled tagger + SDXL tokenizer cache · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-05-28 | **v2.7.0** — **Anima LoRA Fast mode** (optional `anima_lora` plugin): WebUI entry, one-click install, train monitor sync, benchmark docs · see [`docs/anima-fast.md`](docs/anima-fast.md) |
 | 2026-05-28 | **v2.6.0** — **Anima full finetune** WebUI (`anima-finetune`), `anima_train.py` wrapper, full finetune nav, train monitor label fix; ~24 GB VRAM reference |
