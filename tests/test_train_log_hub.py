@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+import mikazuki.train_log_hub as train_log_hub_module
 from mikazuki.train_log_hub import TrainLogHub, strip_ansi
 
 
@@ -42,6 +43,64 @@ class TrainLogHubAnsiTests(unittest.TestCase):
 
         self.assertEqual(hub.tail("task-tail", 2), ["second", "third"])
         self.assertEqual(hub.tail("missing", 2), [])
+
+
+class TrainLogHubRingBufferTests(unittest.TestCase):
+    """The ring buffer must keep streaming (and stay bounded) after it wraps."""
+
+    def setUp(self):
+        self._old_max = train_log_hub_module._MAX_LINES
+        train_log_hub_module._MAX_LINES = 5
+        self.addCleanup(setattr, train_log_hub_module, "_MAX_LINES", self._old_max)
+
+    def test_snapshot_keeps_streaming_after_ring_wrap(self):
+        hub = TrainLogHub()
+        hub.start_task("wrap")
+        for i in range(12):
+            hub.append_line("wrap", f"line-{i}\n")
+
+        lines, total, done = hub.snapshot_from("wrap", 0)
+        self.assertEqual(total, 12)
+        self.assertEqual(lines, [f"line-{i}" for i in range(7, 12)])
+        self.assertFalse(done)
+
+        # A caught-up cursor (start_idx == total) must yield fresh lines after
+        # the wrap instead of returning [] forever (the old SSE freeze bug).
+        hub.append_line("wrap", "line-12\n")
+        lines, total, _ = hub.snapshot_from("wrap", 12)
+        self.assertEqual(lines, ["line-12"])
+        self.assertEqual(total, 13)
+
+        lines, _, _ = hub.snapshot_from("wrap", 13)
+        self.assertEqual(lines, [])
+
+    def test_snapshot_events_keep_streaming_after_ring_wrap(self):
+        hub = TrainLogHub()
+        hub.start_task("wrap-ev")
+        for i in range(8):
+            hub.append_event("wrap-ev", {"step": i})
+
+        events, total, _ = hub.snapshot_events_from("wrap-ev", 8)
+        self.assertEqual(events, [])
+        self.assertEqual(total, 8)
+
+        hub.append_event("wrap-ev", {"step": 8})
+        events, total, _ = hub.snapshot_events_from("wrap-ev", 8)
+        self.assertEqual([event["step"] for event in events], [8])
+        self.assertEqual(total, 9)
+
+    def test_drop_task_frees_buffers(self):
+        hub = TrainLogHub()
+        hub.start_task("gone")
+        hub.append_line("gone", "x\n")
+        hub.append_event("gone", {"step": 0})
+        hub.mark_done("gone")
+
+        hub.drop_task("gone")
+
+        self.assertEqual(hub.snapshot_from("gone", 0), ([], 0, False))
+        self.assertEqual(hub.snapshot_events_from("gone", 0), ([], 0, False))
+        self.assertEqual(hub.tail("gone"), [])
 
 
 if __name__ == "__main__":

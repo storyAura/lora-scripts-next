@@ -14,6 +14,7 @@ from mikazuki.log import log
 from mikazuki.train_log_hub import hub
 
 _FAILURE_LOG_TAIL_LINES = 80
+_MAX_RETAINED_TERMINAL_TASKS = 16
 
 try:
     import msvcrt
@@ -201,11 +202,24 @@ class Task:
 
 
 class TaskManager:
+    _TERMINAL_STATUSES = (TaskStatus.FINISHED, TaskStatus.TERMINATED, TaskStatus.FAILED)
+
     def __init__(self, max_concurrent=1) -> None:
         self.max_concurrent = max_concurrent
-        self.tasks: Dict[Task] = {}
+        self.tasks: Dict[str, Task] = {}
+
+    def _prune_terminal_tasks(self):
+        """Drop oldest finished tasks and their log buffers so long sessions stay bounded."""
+        terminal_ids = [tid for tid, t in self.tasks.items() if t.status in self._TERMINAL_STATUSES]
+        excess = len(terminal_ids) - _MAX_RETAINED_TERMINAL_TASKS
+        if excess <= 0:
+            return
+        for tid in terminal_ids[:excess]:
+            self.tasks.pop(tid, None)
+            hub.drop_task(tid)
 
     def create_task(self, command: List[str], environ, metadata=None, cwd=None, task_id=None):
+        self._prune_terminal_tasks()
         running_tasks = [t for _, t in self.tasks.items() if t.status == TaskStatus.RUNNING]
         if len(running_tasks) >= self.max_concurrent:
             log.error(
@@ -219,6 +233,7 @@ class TaskManager:
         return task
 
     def add_task(self, task_id: str, task: Task):
+        self._prune_terminal_tasks()
         self.tasks[task_id] = task
 
     def terminate_task(self, task_id: str):

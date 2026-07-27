@@ -1124,6 +1124,9 @@ async def train_log_stream(task_id: str):
             if done:
                 yield "data: " + json.dumps({"done": True}, ensure_ascii=False) + "\n\n"
                 break
+            if task_id not in tm.tasks:
+                # Task pruned from the bounded history; stop instead of polling forever.
+                break
 
     return StreamingResponse(
         event_generator(),
@@ -1158,6 +1161,9 @@ async def anima_lora_install_progress_stream(task_id: str):
             idx = total
             if done:
                 yield "data: " + json.dumps({"type": "done", "done": True}, ensure_ascii=False) + "\n\n"
+                break
+            if task_id not in tm.tasks:
+                # Task pruned from the bounded history; stop instead of polling forever.
                 break
 
     return StreamingResponse(

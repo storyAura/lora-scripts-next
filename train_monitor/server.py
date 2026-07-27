@@ -64,6 +64,9 @@ TENSORBOARD_SCALAR_TAGS = (
 )
 TENSORBOARD_LOSS_LIMIT = 10000
 TENSORBOARD_LR_TAG_PREFIXES = ("lr/",)
+# collect_status runs every browser poll; re-parsing unchanged multi-MB event
+# files each time bloats the monitor process, so cache by (path, mtime, size).
+_TB_SCALAR_CACHE: dict = {"key": None, "series": []}
 
 STRONG_ERROR_PATTERNS = [
     r"\btraceback\b",
@@ -375,6 +378,17 @@ def tensorboard_loss_scalars(limit: int = TENSORBOARD_LOSS_LIMIT) -> list[dict]:
     if not event_files:
         return []
 
+    def _stat_entry(path: Path) -> tuple[str, int, int]:
+        st = path.stat()
+        return (str(path), st.st_mtime_ns, st.st_size)
+
+    try:
+        cache_key = tuple(_stat_entry(p) for p in sorted(event_files))
+    except OSError:
+        cache_key = None
+    if cache_key is not None and cache_key == _TB_SCALAR_CACHE["key"]:
+        return _TB_SCALAR_CACHE["series"]
+
     run_dirs: dict[Path, float] = {}
     for event_file in event_files:
         try:
@@ -389,7 +403,7 @@ def tensorboard_loss_scalars(limit: int = TENSORBOARD_LOSS_LIMIT) -> list[dict]:
         try:
             accumulator = event_accumulator.EventAccumulator(
                 str(run_dir),
-                size_guidance={event_accumulator.SCALARS: 0},
+                size_guidance={event_accumulator.SCALARS: limit},
             )
             accumulator.Reload()
             scalar_tags = set(accumulator.Tags().get("scalars", []))
@@ -440,8 +454,12 @@ def tensorboard_loss_scalars(limit: int = TENSORBOARD_LOSS_LIMIT) -> list[dict]:
             if item:
                 series.append(item)
         if series:
+            _TB_SCALAR_CACHE["key"] = cache_key
+            _TB_SCALAR_CACHE["series"] = series
             return series
 
+    _TB_SCALAR_CACHE["key"] = cache_key
+    _TB_SCALAR_CACHE["series"] = []
     return []
 
 
@@ -1090,6 +1108,9 @@ def collect_status() -> dict:
         tasks = api_data(tasks_payload).get("tasks", [])
         status["gui_online"] = True
         status["tasks"] = tasks
+        known_ids = {str(t.get("id")) for t in tasks if isinstance(t, dict) and t.get("id")}
+        for stale_id in [tid for tid in TASK_PROGRESS_STATE if tid not in known_ids]:
+            TASK_PROGRESS_STATE.pop(stale_id, None)
     except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
         status["gui_warning"] = (
             f"主 GUI API 暂不可用（尝试 {', '.join(gui_api_candidates())}）：{exc}。"

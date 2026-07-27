@@ -257,6 +257,7 @@
 
     /* ─── log append (DOM-friendly, 不会触发整页重渲染) ──────────────── */
     let lineCount = 0;
+    const MAX_LOG_DOM_LINES = 5000;   // 超长训练只保留最近的行，防止浏览器内存无限膨胀
     function appendLine(text) {
       lineCount++;
       const node = document.createElement("span");
@@ -265,7 +266,10 @@
       else if (/warn|warning/i.test(lower)) node.className = "line-warn";
       node.textContent = text + "\n";
       logEl.appendChild(node);
-      lineCountEl.textContent = lineCount + " 行";
+      while (logEl.childNodes.length > MAX_LOG_DOM_LINES) logEl.removeChild(logEl.firstChild);
+      lineCountEl.textContent = lineCount > MAX_LOG_DOM_LINES
+        ? lineCount + " 行（显示最近 " + MAX_LOG_DOM_LINES + " 行）"
+        : lineCount + " 行";
       if (stickToBottom || userOverride) logEl.scrollTop = logEl.scrollHeight;
     }
 

@@ -100,7 +100,12 @@ async def websocket_a(ws_a: WebSocket):
     async with websockets.connect(ws_b_uri, timeout=360, ping_timeout=None) as ws_b_client:
         fwd_task = asyncio.create_task(proxy_ws_forward(ws_a, ws_b_client))
         rev_task = asyncio.create_task(proxy_ws_reverse(ws_a, ws_b_client))
-        await asyncio.gather(fwd_task, rev_task)
+        # Either side closing must tear down the other pump, or the surviving
+        # recv() keeps the socket pair and task alive long after the tab closed.
+        done, pending = await asyncio.wait({fwd_task, rev_task}, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
 router.add_route("/proxy/tensorboard/{path:path}", reverse_proxy_maker("tensorboard"), ["GET", "POST"])
 router.add_route("/font-roboto/{path:path}", reverse_proxy_maker("tensorboard", full_path=True), ["GET", "POST"])
