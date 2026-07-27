@@ -2,12 +2,12 @@
   <img src="assets/readme/next-trainer-cover.png" alt="Next Trainer" width="880" />
 </p>
 
-<h1 align="center">Next Trainer</h1>
+<h1 align="center">lora-scripts-story-next</h1>
 
 <p align="center">
   <b>Windows 一键 LoRA / 全量微调训练工具</b> — 支持 <b>Anima</b> / SD 1.5 / SDXL / Flux<br/>
   解压即用，无需配环境。Anima LoRA 约 12GB 显存即可起步；<b>Anima 全量微调建议 24GB 级显存</b>。<br/>
-  <sub>基于 <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>，秋叶系 GUI 体验。</sub>
+  <sub>基于 <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>，秋叶系 GUI 体验。个人分支，上游为 <a href="https://github.com/wochenlong/lora-scripts-next">wochenlong/lora-scripts-next</a>（Next Trainer）。</sub>
 </p>
 
 <p align="center">
@@ -15,14 +15,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next"><img src="https://img.shields.io/github/stars/wochenlong/lora-scripts-next?style=flat-square&label=stars&logo=github&color=8b5cf6" alt="stars"/></a>
-  <a href="https://github.com/wochenlong/lora-scripts-next/blob/main/LICENSE"><img src="https://img.shields.io/github/license/wochenlong/lora-scripts-next?style=flat-square&color=ec4899" alt="license"/></a>
+  <a href="https://github.com/storyAura/lora-scripts-story-next"><img src="https://img.shields.io/github/stars/storyAura/lora-scripts-story-next?style=flat-square&label=stars&logo=github&color=8b5cf6" alt="stars"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/storyAura/lora-scripts-story-next?style=flat-square&color=ec4899" alt="license"/></a>
 </p>
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next/blob/main/README.md"><b>English (README)</b></a>
+  <a href="README.md"><b>English (README)</b></a>
 </p>
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next/blob/main/NOTICE.md"><b>致谢 & 许可</b></a>
+  <a href="NOTICE.md"><b>致谢 & 许可</b></a>
 </p>
 <p align="center">
   <a href="https://github.com/wochenlong/lora-scripts-next/tree/anima-edit"><b>实验分支：Anima Edit</b></a>
@@ -54,8 +54,8 @@
 <summary><b>从源码安装（Linux / 高级用户）</b></summary>
 
 ```sh
-git clone https://github.com/wochenlong/lora-scripts-next.git
-cd lora-scripts-next
+git clone https://github.com/storyAura/lora-scripts-story-next.git
+cd lora-scripts-story-next
 
 # Windows
 run_gui.bat

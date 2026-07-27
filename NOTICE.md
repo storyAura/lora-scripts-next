@@ -2,7 +2,7 @@
 
 ### Upstream GUI / community packaging
 
-This repository is maintained as **[wochenlong/lora-scripts-next](https://github.com/wochenlong/lora-scripts-next)** and traces its UX and packaging to **Akegarasu SD-Trainer** / **秋叶一键训练包**: **[Akegarasu/lora-scripts](https://github.com/Akegarasu/lora-scripts)** (training backend integration: **[kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts)**).
+This repository is maintained as **[storyAura/lora-scripts-story-next](https://github.com/storyAura/lora-scripts-story-next)**, forked from **[wochenlong/lora-scripts-next](https://github.com/wochenlong/lora-scripts-next)**, and traces its UX and packaging to **Akegarasu SD-Trainer** / **秋叶一键训练包**: **[Akegarasu/lora-scripts](https://github.com/Akegarasu/lora-scripts)** (training backend integration: **[kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts)**).
 
 ### Rectified Flow (SDXL LoRA)
 

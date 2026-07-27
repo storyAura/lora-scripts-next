@@ -3,7 +3,7 @@ description: 项目入口 — 是什么、关键路径、本地/公开命名、�
 alwaysApply: true
 ---
 
-# lora-scripts-next（SD Trainer Next）
+# lora-scripts-story-next（SD Trainer Next）
 
 基于秋叶 `Akegarasu/lora-scripts` 分叉的 **LoRA / 网络训练 WebUI**：`python gui.py` 拉起 FastAPI（`mikazuki`）、对接魔改版 `vendor/sd-scripts`、预编译前端 `frontend/dist/`、可选 `train_monitor/` 训练监控。整合包与云镜像另有固定入口脚本，见下表「契约」。
 

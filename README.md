@@ -2,12 +2,12 @@
   <img src="assets/readme/next-trainer-cover.png" alt="Next Trainer" width="880" />
 </p>
 
-<h1 align="center">Next Trainer</h1>
+<h1 align="center">lora-scripts-story-next</h1>
 
 <p align="center">
   <b>One-click LoRA &amp; full finetune training GUI for Windows</b> — supports <b>Anima</b> / SD 1.5 / SDXL / Flux<br/>
   Extract and run. No environment setup needed. ~12 GB VRAM for Anima LoRA; <b>Anima full finetune needs ~24 GB</b>.<br/>
-  <sub>Powered by <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>, Akegarasu-style GUI.</sub>
+  <sub>Powered by <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>, Akegarasu-style GUI. A personal fork of <a href="https://github.com/wochenlong/lora-scripts-next">wochenlong/lora-scripts-next</a> (Next Trainer).</sub>
 </p>
 
 <p align="center">
@@ -15,14 +15,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next"><img src="https://img.shields.io/github/stars/wochenlong/lora-scripts-next?style=flat-square&label=stars&logo=github&color=8b5cf6" alt="stars"/></a>
-  <a href="https://github.com/wochenlong/lora-scripts-next/blob/main/LICENSE"><img src="https://img.shields.io/github/license/wochenlong/lora-scripts-next?style=flat-square&color=ec4899" alt="license"/></a>
+  <a href="https://github.com/storyAura/lora-scripts-story-next"><img src="https://img.shields.io/github/stars/storyAura/lora-scripts-story-next?style=flat-square&label=stars&logo=github&color=8b5cf6" alt="stars"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/storyAura/lora-scripts-story-next?style=flat-square&color=ec4899" alt="license"/></a>
 </p>
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next/blob/main/README-zh.md"><b>中文</b></a>
+  <a href="README-zh.md"><b>中文</b></a>
 </p>
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next/blob/main/NOTICE.md"><b>Credits</b></a>
+  <a href="NOTICE.md"><b>Credits</b></a>
 </p>
 <p align="center">
   <a href="https://github.com/wochenlong/lora-scripts-next/tree/anima-edit"><b>Experimental: Anima Edit branch</b></a>
@@ -54,8 +54,8 @@ For tagger paths, CLI/cloud training, and upgrade notes see **[Portable getting 
 <summary><b>Install from source (Linux / advanced users)</b></summary>
 
 ```sh
-git clone https://github.com/wochenlong/lora-scripts-next.git
-cd lora-scripts-next
+git clone https://github.com/storyAura/lora-scripts-story-next.git
+cd lora-scripts-story-next
 
 # Windows
 run_gui.bat
