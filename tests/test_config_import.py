@@ -250,13 +250,19 @@ class AnimaLoraTypeBranchConstTests(unittest.TestCase):
 
     EXPECTED = {
         "lora": ("networks.lora_anima", None),
-        "lora_fa": ("networks.lora_anima", None),
-        "vera": ("networks.lora_anima", None),
+        "rslora": ("lycoris.kohya", "lora"),
+        "lora_plus": ("networks.lora_anima", None),
+        "dora": ("lycoris.kohya", "lora"),
+        "lora_fa": ("networks.lora_fa_anima", None),
+        "vera": ("networks.vera_anima", None),
+        "delora": ("networks.delora_anima", None),
+        "waveft": ("networks.waveft_anima", None),
+        "deft": ("networks.deft_anima", None),
+        "moslora": ("networks.moslora_anima", None),
         "tlora": ("networks.tlora_anima", None),
         "loha": ("networks.loha", None),
         "lokr": ("lycoris.kohya", "lokr"),
         "glokr": ("lycoris.kohya", "glokr"),
-        "tglokr": ("lycoris.kohya", "glokr"),
         "bokr": ("lycoris.kohya", "bokr"),
         "bora": ("lycoris.kohya", "bora"),
         "gsokr": ("lycoris.kohya", "gsokr"),
@@ -299,6 +305,10 @@ class AnimaLoraTypeBranchConstTests(unittest.TestCase):
     def test_lora_type_recovered_from_unambiguous_network_module(self):
         for module, expected in (
             ("networks.tlora_anima", "tlora"),
+            ("networks.delora_anima", "delora"),
+            ("networks.waveft_anima", "waveft"),
+            ("networks.deft_anima", "deft"),
+            ("networks.moslora_anima", "moslora"),
             ("networks.loha", "loha"),
         ):
             with self.subTest(module=module):
@@ -308,6 +318,58 @@ class AnimaLoraTypeBranchConstTests(unittest.TestCase):
                 }
                 result = validate_config_import("sd3-lora", config)
                 self.assertEqual(result["config"]["lora_type"], expected)
+
+    def test_custom_algorithm_network_args_are_hydrated_for_the_form(self):
+        cases = (
+            (
+                "networks.delora_anima",
+                ["delora_lambda=12.5"],
+                {"delora_lambda": 12.5},
+            ),
+            (
+                "networks.waveft_anima",
+                [
+                    "waveft_n_frequency=128",
+                    "waveft_use_idwt=False",
+                    "waveft_wavelet_family=db1",
+                ],
+                {
+                    "waveft_n_frequency": 128,
+                    "waveft_use_idwt": False,
+                    "waveft_wavelet_family": "db1",
+                },
+            ),
+            (
+                "networks.deft_anima",
+                [
+                    "deft_decomposition_method=qr",
+                    "deft_alpha=16",
+                    "deft_init_weights=False",
+                ],
+                {
+                    "deft_decomposition_method": "qr",
+                    "deft_alpha": 16,
+                    "deft_init_weights": False,
+                },
+            ),
+            (
+                "networks.moslora_anima",
+                ["moslora_mixer_init=orthogonal"],
+                {"moslora_mixer_init": "orthogonal"},
+            ),
+        )
+        for network_module, network_args, expected in cases:
+            with self.subTest(network_module=network_module):
+                result = validate_config_import(
+                    "sd3-lora",
+                    {
+                        "model_train_type": "anima-lora",
+                        "network_module": network_module,
+                        "network_args": network_args,
+                    },
+                )
+                for key, value in expected.items():
+                    self.assertEqual(result["config"][key], value)
 
     def test_non_anima_page_is_untouched(self):
         config = {"model_train_type": "flux-lora", "lora_type": "lokr"}

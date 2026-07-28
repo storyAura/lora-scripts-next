@@ -7,6 +7,7 @@ networks.* algos build against vendor/sd-scripts. A tiny fake DiT whose block cl
 is named ``Block`` matches both target-module lists.
 """
 import sys
+import math
 import unittest
 from pathlib import Path
 
@@ -18,6 +19,7 @@ import torch
 import torch.nn as nn
 
 from mikazuki.anima_backend.adapter import adapt_anima_config
+from mikazuki.training_validation import TrainingConfigurationError
 
 DIM = 16
 
@@ -88,6 +90,9 @@ def _build(ui_fields):
 
 def _smoke_backward(net, dit):
     x = torch.randn(2, DIM)
+    set_timestep = getattr(net, "set_current_timestep", None)
+    if callable(set_timestep):
+        set_timestep(torch.tensor([500.0, 500.0]))
     dit(x).sum().backward()
     return sum(1 for p in net.parameters() if p.grad is not None)
 
@@ -105,6 +110,42 @@ class LoraTypePipelineTests(unittest.TestCase):
             {"network_module": "networks.lora_anima", "network_dropout": 0}, "LoRAModule"
         )
 
+    def test_rslora_uses_rank_stabilized_scaling(self):
+        module = self._assert_pipeline(
+            {"lora_type": "rslora"},
+            "LoConModule",
+        )
+
+        self.assertTrue(module.rs_lora)
+        self.assertAlmostEqual(module.scale, 8 / math.sqrt(8))
+
+    def test_dora_uses_weight_decomposed_lora(self):
+        module = self._assert_pipeline(
+            {"lora_type": "dora"},
+            "LoConModule",
+        )
+
+        self.assertTrue(module.wd)
+        self.assertTrue(hasattr(module, "dora_scale"))
+
+    def test_lora_plus_creates_distinct_up_matrix_lr_group(self):
+        net, dit, loras = _build(
+            {
+                "lora_type": "lora_plus",
+                "loraplus_lr_ratio": 16,
+            }
+        )
+        groups, _ = net.prepare_optimizer_params_with_multiple_te_lrs(
+            None,
+            1e-4,
+            1e-4,
+        )
+        group_lrs = sorted(group["lr"] for group in groups)
+
+        self.assertEqual(type(loras[0]).__name__, "LoRAModule")
+        self.assertEqual(group_lrs, [1e-4, 1.6e-3])
+        self.assertGreater(_smoke_backward(net, dit), 0)
+
     def test_tlora_dynamic_rank_fields_reach_module(self):
         m0 = self._assert_pipeline(
             {
@@ -115,6 +156,59 @@ class LoraTypePipelineTests(unittest.TestCase):
             "TLoRAModule",
         )
         self.assertEqual(int(m0.tlora_min_rank), 4)
+
+    def test_delora(self):
+        module = self._assert_pipeline(
+            {
+                "lora_type": "delora",
+                "network_dropout": 0,
+                "delora_lambda": 15,
+            },
+            "DeLoRAModule",
+        )
+        self.assertAlmostEqual(float(module.delora_lambda.item()), 15.0)
+
+    def test_waveft(self):
+        module = self._assert_pipeline(
+            {
+                "lora_type": "waveft",
+                "network_dropout": 0,
+                "waveft_n_frequency": 32,
+                "waveft_scaling": 25,
+                "waveft_random_loc_seed": 777,
+                "waveft_use_idwt": True,
+                "waveft_wavelet_family": "db1",
+            },
+            "WaveFTModule",
+        )
+        self.assertEqual(module.waveft_spectrum.numel(), 32)
+
+    def test_deft(self):
+        module = self._assert_pipeline(
+            {
+                "lora_type": "deft",
+                "network_dropout": 0,
+                "deft_decomposition_method": "qr",
+                "deft_alpha": 0,
+                "deft_init_scale": 1,
+            },
+            "DeftModule",
+        )
+        self.assertEqual(int(module.deft_decomposition_code.item()), 1)
+
+    def test_moslora(self):
+        module = self._assert_pipeline(
+            {
+                "lora_type": "moslora",
+                "network_dropout": 0,
+                "moslora_mixer_init": "identity",
+            },
+            "MoSLoRAModule",
+        )
+        torch.testing.assert_close(
+            module.lora_mixer.weight,
+            torch.eye(module.lora_dim),
+        )
 
     def test_loha(self):
         self._assert_pipeline(
@@ -182,16 +276,67 @@ class LoraTypePipelineTests(unittest.TestCase):
             "GLoRABOFTModule",
         )
 
-    def test_vera_and_lora_fa_are_plain_lora_for_now(self):
-        # Known limitation: networks/lora_anima.py has no VeRA / LoRA-FA variant logic,
-        # so both currently train as a standard LoRA. This test documents the fact and
-        # will fail (guiding an update) once real variants are implemented.
-        for ui in (
-            {"network_module": "networks.lora_anima", "network_dropout": 0},  # vera branch
-            {"network_module": "networks.lora_anima", "network_dropout": 0},  # lora_fa branch
-        ):
-            _, _, loras = _build(ui)
-            self.assertEqual(type(loras[0]).__name__, "LoRAModule")
+    def test_lorafa_freezes_down_matrix_and_trains_up_matrix(self):
+        net, dit, loras = _build({"lora_type": "lora_fa"})
+        module = loras[0]
+        dit(torch.randn(2, DIM)).sum().backward()
+
+        self.assertEqual(type(module).__name__, "LoRAFAModule")
+        self.assertFalse(module.lora_down.weight.requires_grad)
+        self.assertIsNone(module.lora_down.weight.grad)
+        self.assertIsNotNone(module.lora_up.weight.grad)
+        groups, _ = net.prepare_optimizer_params_with_multiple_te_lrs(
+            None,
+            1e-4,
+            1e-4,
+        )
+        self.assertTrue(all("lorafa_pairs" in group for group in groups))
+
+    def test_vera_uses_shared_projection_and_trainable_scaling_vectors(self):
+        net, dit, loras = _build(
+            {
+                "lora_type": "vera",
+                "vera_projection_seed": 42,
+                "vera_d_initial": 0.1,
+            }
+        )
+        sample = torch.randn(2, DIM)
+        net.set_enabled(False)
+        baseline = dit(sample).detach()
+        net.set_enabled(True)
+        adapted = dit(sample)
+        adapted.sum().backward()
+
+        self.assertEqual(type(loras[0]).__name__, "VeRAModule")
+        torch.testing.assert_close(adapted, baseline)
+        self.assertIsNotNone(loras[0].vera_lambda_b.grad)
+        self.assertIsNotNone(loras[0].vera_lambda_d.grad)
+        self.assertEqual(loras[0].projection_data_ptrs(), loras[1].projection_data_ptrs())
+        state = net.state_dict()
+        self.assertIn("vera_A", state)
+        self.assertIn("vera_B", state)
+        self.assertIn("vera_projection_seed", state)
+        self.assertEqual(
+            sum(key.endswith("vera_lambda_b") for key in state),
+            len(loras),
+        )
+
+    def test_pissa_uses_svd_initialization_and_preserves_gradients(self):
+        net, dit, loras = _build(
+            {
+                "lora_type": "lora",
+                "pissa_init": True,
+                "pissa_method": "svd",
+                "pissa_export_mode": "LoRA无损兼容导出",
+            }
+        )
+        dit(torch.randn(2, DIM)).sum().backward()
+
+        self.assertEqual(type(loras[0]).__name__, "PiSSAModule")
+        self.assertGreater(torch.count_nonzero(loras[0].lora_down.weight), 0)
+        self.assertGreater(torch.count_nonzero(loras[0].lora_up.weight), 0)
+        self.assertIsNotNone(loras[0].lora_down.weight.grad)
+        self.assertIsNotNone(loras[0].lora_up.weight.grad)
 
 
 if __name__ == "__main__":

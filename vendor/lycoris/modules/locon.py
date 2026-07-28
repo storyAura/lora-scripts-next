@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import LycorisBaseModule
+from .functional import compute_merged_delta
 from ..functional.general import rebuild_tucker
 from ..logging import logger
 
@@ -82,17 +83,28 @@ class LoConModule(LycorisBaseModule):
         self.lora_up = nn.Linear(lora_dim, out_dim, bias=False)
 
         self.wd = weight_decompose
+        self.wd_on_out = wd_on_out
         if self.wd:
             org_weight = org_module.weight.cpu().clone().float()
-            # 1. 初始化列缩放参数 m^c (out_features, 1)
-            self.bora_scale_c = nn.Parameter(
-                org_weight.norm(dim=1, keepdim=True)
-            ).float()
-            
-            # 2. 初始化行缩放参数 m^r (1, in_features)
-            self.bora_scale_r = nn.Parameter(
-                org_weight.norm(dim=0, keepdim=True)
-            ).float()
+            self.dora_norm_dims = org_weight.dim() - 1
+            if self.wd_on_out:
+                self.dora_scale = nn.Parameter(
+                    torch.norm(
+                        org_weight.reshape(org_weight.shape[0], -1),
+                        dim=1,
+                        keepdim=True,
+                    ).reshape(org_weight.shape[0], *[1] * self.dora_norm_dims)
+                ).float()
+            else:
+                self.dora_scale = nn.Parameter(
+                    torch.norm(
+                        org_weight.transpose(1, 0).reshape(org_weight.shape[1], -1),
+                        dim=1,
+                        keepdim=True,
+                    )
+                    .reshape(org_weight.shape[1], *[1] * self.dora_norm_dims)
+                    .transpose(1, 0)
+                ).float()
 
         if dropout:
             self.dropout = nn.Dropout(dropout)
@@ -286,14 +298,17 @@ class LoConModule(LycorisBaseModule):
         device = x.device
 
         base_weight = self._current_weight().to(device)
-        diff_weight = self.make_weight(device).to(base_weight.dtype) * scale
-        if self.wd:
-            new_weight = self.apply_weight_decompose(
-                base_weight + diff_weight, self.multiplier
-            )
-        else:
-            new_weight = base_weight + diff_weight * self.multiplier
-
-        delta_weight = new_weight - base_weight
+        diff_weight = self.make_weight(device) * scale
+        transform = (
+            (lambda weight: self.apply_weight_decompose(weight, self.multiplier))
+            if self.wd
+            else None
+        )
+        delta_weight = compute_merged_delta(
+            base_weight,
+            diff_weight,
+            self.multiplier,
+            transform,
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta

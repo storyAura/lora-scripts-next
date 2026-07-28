@@ -248,7 +248,9 @@ class GloKrSoraModule(LycorisBaseModule):
         # 5. Rank Dropout
         if self.training and self.rank_dropout:
             dtype = weight.dtype
-            drop = (torch.rand(weight.size(0)) > self.rank_dropout).to(dtype)
+            drop = (
+                torch.rand(weight.size(0), device=weight.device) > self.rank_dropout
+            ).to(dtype)
             drop = drop.view(-1, *[1] * len(weight.shape[1:]))
             if self.rank_dropout_scale:
                 drop /= drop.mean()

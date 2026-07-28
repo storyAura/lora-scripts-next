@@ -72,3 +72,6 @@ data/
 
 # Optional vendored anima_lora experiments
 vendor/anima_lora/
+
+# Local tagger model weights (downloaded at runtime)
+tagger-models/

@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import LycorisBaseModule
+from .functional import compute_merged_delta
 from ..functional.general import rebuild_tucker
 from ..logging import logger
 
@@ -332,14 +333,18 @@ class LoConModule(LycorisBaseModule):
         device = x.device
 
         base_weight = self._current_weight().to(device)
-        # 修复: 显式应用 multiplier 于 diff_weight，使 multiplier=0 时正确退化
-        diff_weight = self.make_weight(device).to(base_weight.dtype) * scale * self.multiplier
-        if self.wd:
-            new_weight = self.apply_weight_decompose(base_weight + diff_weight)
-        else:
-            new_weight = base_weight + diff_weight
-
-        delta_weight = new_weight - base_weight
+        diff_weight = self.make_weight(device) * scale
+        transform = (
+            (lambda weight: self.apply_weight_decompose(weight))
+            if self.wd
+            else None
+        )
+        delta_weight = compute_merged_delta(
+            base_weight,
+            diff_weight,
+            self.multiplier,
+            transform,
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta
 
@@ -616,14 +621,17 @@ class BoRAModule(LycorisBaseModule):
         device = x.device
 
         base_weight = self._current_weight().to(device)
-        # 修复: 显式应用 multiplier 于 diff_weight，使 multiplier=0 时正确退化
-        diff_weight = self.make_weight(device).to(base_weight.dtype) * scale * self.multiplier
-        
-        if self.wd:
-            new_weight = self.apply_weight_decompose(base_weight + diff_weight)
-        else:
-            new_weight = base_weight + diff_weight
-
-        delta_weight = new_weight - base_weight
+        diff_weight = self.make_weight(device) * scale
+        transform = (
+            (lambda weight: self.apply_weight_decompose(weight))
+            if self.wd
+            else None
+        )
+        delta_weight = compute_merged_delta(
+            base_weight,
+            diff_weight,
+            self.multiplier,
+            transform,
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta

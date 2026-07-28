@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 from library import custom_offloading_utils, attention
+from library.selective_activation_checkpointing import create_anima_selective_checkpoint_contexts
 
 
 def to_device(x, device):
@@ -835,16 +836,25 @@ class Block(nn.Module):
         self.gradient_checkpointing = False
         self.cpu_offload_checkpointing = False
         self.unsloth_offload_checkpointing = False
+        self.selective_activation_checkpointing = False
 
     def enable_gradient_checkpointing(self, cpu_offload: bool = False, unsloth_offload: bool = False):
         self.gradient_checkpointing = True
         self.cpu_offload_checkpointing = cpu_offload if not unsloth_offload else False
         self.unsloth_offload_checkpointing = unsloth_offload
+        self.selective_activation_checkpointing = False
+
+    def enable_selective_activation_checkpointing(self):
+        self.gradient_checkpointing = True
+        self.cpu_offload_checkpointing = False
+        self.unsloth_offload_checkpointing = False
+        self.selective_activation_checkpointing = True
 
     def disable_gradient_checkpointing(self):
         self.gradient_checkpointing = False
         self.cpu_offload_checkpointing = False
         self.unsloth_offload_checkpointing = False
+        self.selective_activation_checkpointing = False
 
     def reset_parameters(self) -> None:
         self.layer_norm_self_attn.reset_parameters()
@@ -978,7 +988,21 @@ class Block(nn.Module):
         extra_per_block_pos_emb: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if self.training and self.gradient_checkpointing:
-            if self.unsloth_offload_checkpointing:
+            if self.selective_activation_checkpointing:
+                return torch_checkpoint(
+                    self._forward,
+                    x_B_T_H_W_D,
+                    emb_B_T_D,
+                    crossattn_emb,
+                    attn_params,
+                    crossattn_mask,
+                    rope_emb_L_1_1_D,
+                    adaln_lora_B_T_3D,
+                    extra_per_block_pos_emb,
+                    use_reentrant=False,
+                    context_fn=create_anima_selective_checkpoint_contexts,
+                )
+            elif self.unsloth_offload_checkpointing:
                 # Unsloth: async non-blocking CPU RAM offload (fastest offload method)
                 return unsloth_checkpoint(
                     self._forward,
@@ -1180,6 +1204,10 @@ class Anima(nn.Module):
     def enable_gradient_checkpointing(self, cpu_offload: bool = False, unsloth_offload: bool = False):
         for block in self.blocks:
             block.enable_gradient_checkpointing(cpu_offload=cpu_offload, unsloth_offload=unsloth_offload)
+
+    def enable_selective_activation_checkpointing(self):
+        for block in self.blocks:
+            block.enable_selective_activation_checkpointing()
 
     def disable_gradient_checkpointing(self):
         for block in self.blocks:

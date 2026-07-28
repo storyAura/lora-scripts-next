@@ -55,6 +55,11 @@ from mikazuki.anima_fast_backend.preview import apply_anima_fast_preview
 from mikazuki.anima_fast_backend.preprocess import prepare_anima_fast_dataset, user_left_resized_empty
 from mikazuki.anima_fast_backend.settings import discover_runtime, feature_enabled
 from mikazuki.anima_fast_backend.source_root import InstallSourceError, resolve_install_source_root
+from mikazuki.attention_probe import (
+    AttentionBackendUnavailableError,
+    detect_best_training_attention,
+    probe_training_attention_backend,
+)
 from mikazuki.app.config import app_config
 from mikazuki.app.models import (APIResponse, APIResponseFail,
                                  APIResponseSuccess, TaggerInterrogateRequest,
@@ -67,11 +72,18 @@ from mikazuki.tagger.progress import tagger_progress
 from mikazuki.tasks import tm
 from mikazuki.train_log_hub import hub as train_log_hub
 from mikazuki.utils import train_utils
+from mikazuki.training_validation import (
+    TrainingConfigurationError,
+    validate_training_configuration,
+)
+from mikazuki.optimizer_configuration import (
+    OptimizerConfigurationError,
+    normalize_optimizer_configuration,
+)
 from mikazuki.utils.config_import import validate_config_import
 from mikazuki.utils.config_export import normalize_config_for_export
 from mikazuki.utils.config_args import normalize_custom_args, normalize_kv_arg_list
 from mikazuki.utils.devices import printable_devices
-from mikazuki.portable_utils import flash_attn_stack_usable
 from mikazuki.utils.tk_window import (open_directory_selector,
                                       open_file_selector,
                                       tkinter_available)
@@ -318,15 +330,8 @@ def should_generate_sample_prompts(config: dict) -> bool:
 
 
 def _detect_best_attn_mode() -> str:
-    """Auto-detect the best available attention backend for Anima training."""
-    if flash_attn_stack_usable():
-        return "flash"
-    try:
-        import xformers  # noqa: F401
-        return "xformers"
-    except ImportError:
-        pass
-    return "torch"
+    """Select the first attention backend that passes forward and backward."""
+    return detect_best_training_attention()
 
 
 def _cuda_bf16_supported() -> bool:
@@ -480,29 +485,41 @@ def apply_anima_training_defaults(config: dict, model_train_type: str):
     elif _anima_lokr_training(config):
         _warn_lokr_precision_risks(config)
 
-    requested_attn = config.get("attn_mode", "")
+    requested_attn = str(config.get("attn_mode", "")).strip().lower()
     if not requested_attn:
         best = _detect_best_attn_mode()
         config["attn_mode"] = best
         log.info(f"Anima attn_mode auto-detected: {best}")
     elif requested_attn == "xformers":
-        try:
-            import xformers  # noqa: F401
-        except ImportError:
-            best = _detect_best_attn_mode()
-            config["attn_mode"] = best
-            log.warning(
-                f"attn_mode='xformers' requested but xformers is not installed, "
-                f"falling back to '{best}'"
+        result = probe_training_attention_backend("xformers")
+        if not result.usable:
+            raise AttentionBackendUnavailableError(
+                "attn_mode='xformers' was explicitly requested but its training "
+                f"forward/backward probe failed: {result.reason}"
             )
     elif requested_attn == "flash":
-        if not flash_attn_stack_usable():
-            best = _detect_best_attn_mode()
-            config["attn_mode"] = best
-            log.warning(
-                f"attn_mode='flash' requested but flash-attn is not available, "
-                f"falling back to '{best}'"
+        result = probe_training_attention_backend("flash")
+        if not result.usable:
+            raise AttentionBackendUnavailableError(
+                "attn_mode='flash' was explicitly requested but its hardware and "
+                f"training forward/backward probe failed: {result.reason}"
             )
+
+
+def _apply_anima_training_defaults_or_fail(config: dict, model_train_type: str):
+    try:
+        apply_anima_training_defaults(config, model_train_type)
+        return None
+    except AttentionBackendUnavailableError as exc:
+        log.error(str(exc))
+        return APIResponseFail(
+            message=str(exc),
+            data={
+                "field": "attn_mode",
+                "value": config.get("attn_mode"),
+                "model_train_type": model_train_type,
+            },
+        )
 
 
 def _anima_fast_runtime():
@@ -632,11 +649,34 @@ async def create_toml_file(request: Request):
     config: dict = json.loads(json_data.decode("utf-8"))
     train_utils.fix_config_types(config)
     normalize_custom_args(config)
+    try:
+        optimizer_config = normalize_optimizer_configuration(config)
+        config = optimizer_config.values
+    except OptimizerConfigurationError as exc:
+        return APIResponseFail(
+            message=str(exc),
+            data={
+                "field": exc.field,
+                "value": exc.value,
+                "model_train_type": config.get("model_train_type"),
+            },
+        )
     train_utils.ensure_enable_preview_flag(config)
 
     gpu_ids = config.pop("gpu_ids", None)
 
     model_train_type = config.pop("model_train_type", "sd-lora")
+    try:
+        validate_training_configuration(config, model_train_type)
+    except TrainingConfigurationError as exc:
+        return APIResponseFail(
+            message=str(exc),
+            data={
+                "field": exc.field,
+                "value": exc.value,
+                "model_train_type": model_train_type,
+            },
+        )
     if model_train_type == ANIMA_FAST_TRAIN_TYPE:
         if not feature_enabled():
             return _anima_fast_disabled_response()
@@ -689,7 +729,9 @@ async def create_toml_file(request: Request):
     suggest_cpu_threads = 8 if len(train_utils.get_total_images(train_data_dir, limit=200)) >= 200 else 2
     trainer_file = trainer_mapping[model_train_type]
     apply_sdxl_prediction_type(config, model_train_type)
-    apply_anima_training_defaults(config, model_train_type)
+    attn_failure = _apply_anima_training_defaults_or_fail(config, model_train_type)
+    if attn_failure is not None:
+        return attn_failure
 
     if model_train_type != "sdxl-finetune":
         if not train_utils.validate_data_dir(train_data_dir):
@@ -725,7 +767,9 @@ async def create_toml_file(request: Request):
     if config.get("sample_prompts"):
         train_utils.normalize_sample_prompt_file(str(config["sample_prompts"]))
 
-    apply_anima_training_defaults(config, model_train_type)
+    attn_failure = _apply_anima_training_defaults_or_fail(config, model_train_type)
+    if attn_failure is not None:
+        return attn_failure
     apply_tokenizer_cache_dir(config, model_train_type)
     sanitize_config(config)
 

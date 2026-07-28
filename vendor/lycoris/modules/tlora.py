@@ -22,6 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import LycorisBaseModule
+from .functional import compute_merged_delta
 from ..logging import logger
 
 
@@ -532,16 +533,18 @@ class TLoraModule(LycorisBaseModule):
         device = x.device
 
         base_weight = self._current_weight().to(device)
-        diff_weight, _ = self.get_diff_weight(multiplier=self.multiplier, device=device)
-        diff_weight = diff_weight.to(base_weight.dtype)
+        diff_weight, _ = self.get_diff_weight(multiplier=1.0, device=device)
 
         # For conv with different kernel sizes, use bypass mode logic
         if self.isconv and diff_weight.shape != base_weight.shape:
             return self.bypass_forward(x, scale=self.multiplier)
 
-        new_weight = base_weight + diff_weight
-        delta_weight = new_weight - base_weight
-
+        delta_weight = compute_merged_delta(
+            base_weight,
+            diff_weight,
+            self.multiplier,
+            None,
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta
 

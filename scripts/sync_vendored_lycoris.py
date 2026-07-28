@@ -2,7 +2,7 @@
 """Install the vendored (locally modified) LyCORIS over the pip-installed one.
 
 `pip install lycoris-lora` gives the upstream package, which lacks the local
-extension algos (glokr / tglokr / bokr / bora / gsokr / glora_boft) and the
+extension algos (glokr / bokr / bora / gsokr / glora_boft) and the
 Anima-specific fixes. Run this after creating or reinstalling the venv:
 
     python scripts/sync_vendored_lycoris.py

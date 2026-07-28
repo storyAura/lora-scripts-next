@@ -58,6 +58,53 @@ T-LoRA introduces dynamic rank adjustment based on diffusion timesteps and ortho
 
 **Paper**: Nikita Balagansky, Daniil Gavrilov. *T-LoRA: Timestep-Dependent Low-Rank Adaptation for Diffusion Models*. 2025.
 
+### DeLoRA and WaveFT
+
+The local Anima implementations of DeLoRA and WaveFT follow the public
+algorithm definitions and checkpoint structure documented by:
+
+- `huggingface/peft`: https://github.com/huggingface/peft
+
+PEFT is licensed under the **Apache License 2.0**. The local integrations are
+limited to Linear layers and add sd-scripts network discovery, validation,
+metadata, merge, and Anima training support.
+
+**Papers**:
+
+- Ling et al. *DeLoRA: Fine-Tuning-Free Low-Rank Adaptation for Subject-Driven
+  Image Generation*. 2025.
+- Guo et al. *WaveFT: Wavelet-domain Adaptation for Low-Rank Fine-Tuning*. 2025.
+
+### DEFT
+
+The local Anima DEFT implementation follows the public algorithm definition
+and was cross-checked against:
+
+- `MAXNORM8650/DEFT`: https://github.com/MAXNORM8650/DEFT
+- `huggingface/peft` DEFT tuner:
+  https://github.com/huggingface/peft/tree/main/src/peft/tuners/deft
+
+Both referenced codebases are licensed under the **Apache License 2.0**. The
+local integration supports the QR and ReLU projection variants for Linear
+layers, strict configuration validation, identity-preserving initialization,
+checkpoint metadata, and merge.
+
+### MoSLoRA
+
+The local MoSLoRA implementation is a clean-room implementation of the
+published `B @ M @ A` equation from:
+
+- Wu et al. *MoSLoRA: Extremely Parameter-Efficient Fine-Tuning via
+  Mixture-of-Subspaces Low-Rank Adaptation*. 2024.
+- Paper: https://arxiv.org/abs/2406.11909
+- Author repository: https://github.com/wutaiqiang/MoSLoRA
+
+The author repository did not contain a root license file when reviewed on
+2026-07-28. No source code from that repository was copied. The local
+implementation uses only the published mathematical description and supports
+Linear layers, deterministic checkpoint identity, merge, and standard-LoRA
+export by folding the mixer into the up projection.
+
 ### EmoSens Optimizer
 
 The EmoSens optimizer is adapted from:

@@ -10,10 +10,44 @@ from unittest import mock
 
 from torch.utils.tensorboard import SummaryWriter
 
+from mikazuki.file_scan_cache import DirectoryScanCache
 from train_monitor import server
 
 
 class TrainMonitorStatusTests(unittest.TestCase):
+    def test_preview_and_model_queries_share_output_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = Path(temp_dir)
+            output_dir = repo / "output"
+            train_out = output_dir / "run"
+            train_out.mkdir(parents=True)
+            preview = train_out / "run_e000001_00.png"
+            model = train_out / "run.safetensors"
+            preview.write_bytes(b"preview")
+            model.write_bytes(b"model")
+            cache = DirectoryScanCache(60.0, lambda: 100.0)
+
+            with mock.patch.object(server, "REPO", repo), \
+                    mock.patch.object(server, "OUTPUT_DIR", output_dir), \
+                    mock.patch.object(server, "LOG_DIR", repo / "logs"), \
+                    mock.patch.object(server, "_FILE_SCAN_CACHE", cache), \
+                    mock.patch.object(server, "latest_training_config", return_value={}):
+                previews = server.newest_preview_images(
+                    output_dir=train_out,
+                    output_name="run",
+                )
+                outputs = server.build_model_outputs(train_out)
+                late_model = train_out / "late.safetensors"
+                late_model.write_bytes(b"late")
+                cached_outputs = server.build_model_outputs(train_out)
+
+        self.assertEqual([item["name"] for item in previews], [preview.name])
+        self.assertEqual([item["name"] for item in outputs["outputs"]], [model.name])
+        self.assertNotIn(
+            late_model.name,
+            [item["name"] for item in cached_outputs["outputs"]],
+        )
+
     def test_gui_api_failure_is_non_blocking_warning(self):
         with mock.patch.object(server, "newest_preview_images", return_value=[]), \
                 mock.patch.object(server, "_training_output_dir", return_value=None), \
@@ -220,7 +254,57 @@ class TrainMonitorStatusTests(unittest.TestCase):
 
         step_card = params[0]
         self.assertTrue(step_card["value"].startswith("12"))
-        self.assertIn("Fast", step_card["value"])
+        self.assertIn("训练器实时", step_card["value"])
+
+    def test_kohya_train_params_prefer_runtime_total_steps(self):
+        # 总步数: the directory estimate cannot see aspect-ratio bucketing, so the
+        # trainer-reported total from the stdout tqdm line must win once known.
+        with tempfile.TemporaryDirectory() as td:
+            data = Path(td) / "4_style"
+            data.mkdir()
+            (data / "a.png").write_bytes(b"x")
+            config = {
+                "model_train_type": "anima-lora",
+                "train_data_dir": str(data),
+                "train_batch_size": "1",
+                "gradient_accumulation_steps": "1",
+                "max_train_epochs": "10",
+            }
+            params = server._extract_train_params(
+                config,
+                engine="kohya",
+                runtime_metrics={"step": 120, "total_steps": 3000},
+            )
+        step_card = params[0]
+        self.assertTrue(step_card["value"].startswith("3000"), step_card)
+        self.assertIn("训练器实时", step_card["value"])
+
+    def test_unet_only_shows_dit_lr_instead_of_global_lr(self):
+        config = {
+            "model_train_type": "anima-lora",
+            "network_train_unet_only": "true",
+            "learning_rate": "0.0001",
+            "unet_lr": "0.0004",
+            "text_encoder_lr": "0.00001",
+        }
+        params = server._extract_train_params(config, engine="kohya")
+        labels = {p["label"]: p["value"] for p in params}
+        self.assertEqual(labels.get("学习率 (DiT)"), "4.00e-04")
+        self.assertNotIn("学习率", labels)
+        self.assertNotIn("UNet LR", labels)
+        self.assertNotIn("TE LR", labels)
+
+    def test_unet_only_falls_back_to_global_lr_when_unet_lr_empty(self):
+        config = {
+            "network_train_unet_only": "true",
+            "learning_rate": "0.0001",
+        }
+        params = server._extract_train_params(config, engine="kohya")
+        labels = {p["label"]: p["value"] for p in params}
+        self.assertEqual(labels.get("学习率 (DiT)"), "1.00e-04")
+
+    def test_toml_bool_keys_include_unet_only_switch(self):
+        self.assertIn("network_train_unet_only", server._TOML_BOOL_KEYS)
 
     def test_collect_status_uses_anima_fast_runtime_total_steps_for_train_params(self):
         with tempfile.TemporaryDirectory() as td:
@@ -269,7 +353,7 @@ class TrainMonitorStatusTests(unittest.TestCase):
 
         self.assertEqual(status["metrics"]["total_steps"], 12)
         self.assertTrue(status["train_params"][0]["value"].startswith("12"))
-        self.assertIn("Fast", status["train_params"][0]["value"])
+        self.assertIn("训练器实时", status["train_params"][0]["value"])
 
     def test_newest_preview_images_uses_active_task_output_dir(self):
         with tempfile.TemporaryDirectory() as td:

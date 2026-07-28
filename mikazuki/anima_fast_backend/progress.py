@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 import json
+import logging
+import os
 import re
+from threading import Lock
 from typing import Any
 
+
+logger = logging.getLogger(__name__)
 
 _LOSS_KEYS = (
     "loss/average",
@@ -15,20 +22,170 @@ _LOSS_KEYS = (
 )
 
 
+@dataclass
+class _JsonlReadState:
+    identity: tuple[int, int, int]
+    offset: int
+    partial: bytes
+    run_start: dict[str, Any] | None
+    recent: deque[dict[str, Any]]
+
+
+def _file_identity(file_stat: os.stat_result) -> tuple[int, int, int]:
+    device = file_stat.st_dev
+    inode = file_stat.st_ino
+    creation_time = file_stat.st_ctime_ns
+    fallback_creation_time = creation_time if inode == 0 else 0
+    return (device, inode, fallback_creation_time)
+
+
+def _read_from_offset(path: Path, offset: int) -> tuple[bytes, int]:
+    with path.open("rb") as handle:
+        handle.seek(offset)
+        payload = handle.read()
+        return payload, handle.tell()
+
+
+def _decode_jsonl_line(path: Path, line: bytes) -> dict[str, Any] | None:
+    if not line.strip():
+        return None
+    try:
+        decoded = line.rstrip(b"\r").decode("utf-8")
+    except UnicodeDecodeError as exc:
+        logger.warning(
+            "Ignoring invalid UTF-8 JSONL event",
+            extra={
+                "path": str(path),
+                "byte_start": exc.start,
+                "byte_end": exc.end,
+            },
+        )
+        return None
+    try:
+        value = json.loads(decoded)
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Ignoring malformed JSONL event",
+            extra={
+                "path": str(path),
+                "line": exc.lineno,
+                "column": exc.colno,
+                "reason": exc.msg,
+            },
+        )
+        return None
+    if not isinstance(value, dict):
+        logger.warning(
+            "Ignoring non-object JSONL event",
+            extra={
+                "path": str(path),
+                "value_type": type(value).__name__,
+            },
+        )
+        return None
+    return value
+
+
+def _decode_complete_partial(line: bytes) -> dict[str, Any] | None:
+    if not line.strip():
+        return None
+    try:
+        value = json.loads(line.rstrip(b"\r").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+class JsonlEventReader:
+    """Incremental connector for append-only JSONL progress files."""
+
+    def __init__(self, max_events: int):
+        if max_events < 2:
+            raise ValueError(f"max_events must be at least 2, received {max_events}")
+        self._max_events = max_events
+        self._states: dict[Path, _JsonlReadState] = {}
+        self._lock = Lock()
+
+    def _new_state(self, identity: tuple[int, int, int]) -> _JsonlReadState:
+        return _JsonlReadState(
+            identity=identity,
+            offset=0,
+            partial=b"",
+            run_start=None,
+            recent=deque(maxlen=self._max_events),
+        )
+
+    def _snapshot(self, state: _JsonlReadState) -> list[dict[str, Any]]:
+        partial_event = _decode_complete_partial(state.partial)
+        partial_kind = (
+            partial_event.get("ev") or partial_event.get("event")
+            if partial_event is not None
+            else None
+        )
+        if partial_kind == "run_start":
+            return [partial_event]
+
+        recent_limit = self._max_events - 1 if state.run_start is not None else self._max_events
+        recent = list(state.recent)[-recent_limit:]
+        if state.run_start is None:
+            snapshot = recent
+        else:
+            snapshot = [state.run_start, *recent]
+        if partial_event is None:
+            return snapshot
+        if state.run_start is not None:
+            recent_slots = self._max_events - 2
+            retained = snapshot[1:][-recent_slots:] if recent_slots > 0 else []
+            return [state.run_start, *retained, partial_event]
+        return [*snapshot[-(self._max_events - 1):], partial_event]
+
+    def read(self, path: Path) -> list[dict[str, Any]]:
+        resolved = path.resolve()
+        with self._lock:
+            if not resolved.is_file():
+                self._states.pop(resolved, None)
+                return []
+
+            stat = resolved.stat()
+            identity = _file_identity(stat)
+            state = self._states.get(resolved)
+            if (
+                state is None
+                or state.identity != identity
+                or stat.st_size < state.offset
+            ):
+                state = self._new_state(identity)
+            elif stat.st_size == state.offset:
+                return self._snapshot(state)
+
+            payload, new_offset = _read_from_offset(resolved, state.offset)
+            if not payload:
+                self._states[resolved] = state
+                return self._snapshot(state)
+
+            parts = (state.partial + payload).split(b"\n")
+            state.partial = parts.pop()
+            state.offset = new_offset
+            for raw_line in parts:
+                event = _decode_jsonl_line(resolved, raw_line)
+                if event is None:
+                    continue
+                kind = event.get("ev") or event.get("event")
+                if kind == "run_start":
+                    state.run_start = event
+                    state.recent.clear()
+                    continue
+                state.recent.append(event)
+
+            self._states[resolved] = state
+            return self._snapshot(state)
+
+
+_DEFAULT_JSONL_EVENT_READER = JsonlEventReader(4096)
+
+
 def read_jsonl_events(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict):
-            events.append(data)
-    return events
+    return _DEFAULT_JSONL_EVENT_READER.read(path)
 
 
 def _pick_loss(event: dict[str, Any]) -> Any:

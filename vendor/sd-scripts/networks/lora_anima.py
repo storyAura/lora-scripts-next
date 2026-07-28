@@ -13,10 +13,18 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def _is_true(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class LoRAModule(torch.nn.Module):
     """
     replaces forward method of the original Linear, instead of replacing the original Linear module.
     """
+
+    supports_conv2d = True
 
     def __init__(
         self,
@@ -232,10 +240,25 @@ def create_network(
     neuron_dropout: Optional[float] = None,
     **kwargs,
 ):
+    if _is_true(kwargs.get("pissa_init")):
+        from networks import pissa_anima
+
+        return pissa_anima.create_network(
+            multiplier,
+            network_dim,
+            network_alpha,
+            vae,
+            text_encoders,
+            unet,
+            neuron_dropout,
+            **kwargs,
+        )
     if network_dim is None:
         network_dim = 4
     if network_alpha is None:
         network_alpha = 1.0
+    network_factory = kwargs.pop("_network_factory", LoRANetwork)
+    module_class = kwargs.pop("_module_class", LoRAModule)
 
     # train LLM adapter
     train_llm_adapter = kwargs.get("train_llm_adapter", "false")
@@ -307,7 +330,7 @@ def create_network(
     else:
         reg_dims = None
 
-    network = LoRANetwork(
+    network = network_factory(
         text_encoders,
         unet,
         multiplier=multiplier,
@@ -322,6 +345,7 @@ def create_network(
         reg_dims=reg_dims,
         reg_lrs=reg_lrs,
         verbose=verbose,
+        module_class=module_class,
     )
 
     loraplus_lr_ratio = kwargs.get("loraplus_lr_ratio", None)
@@ -337,7 +361,24 @@ def create_network(
 
 
 def create_network_from_weights(multiplier, file, ae, text_encoders, unet, weights_sd=None, for_inference=False, **kwargs):
+    if _is_true(kwargs.get("pissa_init")):
+        from networks import pissa_anima
+
+        return pissa_anima.create_network_from_weights(
+            multiplier,
+            file,
+            ae,
+            text_encoders,
+            unet,
+            weights_sd,
+            for_inference,
+            **kwargs,
+        )
+    network_factory = kwargs.pop("_network_factory", LoRANetwork)
+    training_module_class = kwargs.pop("_module_class", LoRAModule)
     if file is None and weights_sd is None:
+        kwargs["_network_factory"] = network_factory
+        kwargs["_module_class"] = training_module_class
         return create_network(multiplier, **kwargs), None
 
     if weights_sd is None:
@@ -365,9 +406,9 @@ def create_network_from_weights(multiplier, file, ae, text_encoders, unet, weigh
         if "llm_adapter" in lora_name:
             train_llm_adapter = True
 
-    module_class = LoRAInfModule if for_inference else LoRAModule
+    module_class = LoRAInfModule if for_inference else training_module_class
 
-    network = LoRANetwork(
+    network = network_factory(
         text_encoders,
         unet,
         multiplier=multiplier,
@@ -467,11 +508,14 @@ class LoRANetwork(torch.nn.Module):
                         module = root_module
 
                     for child_name, child_module in module.named_modules():
-                        is_linear = child_module.__class__.__name__ == "Linear"
+                        is_linear = isinstance(child_module, torch.nn.Linear)
                         is_conv2d = child_module.__class__.__name__ == "Conv2d"
                         is_conv2d_1x1 = is_conv2d and child_module.kernel_size == (1, 1)
 
-                        if is_linear or is_conv2d:
+                        supports_conv2d = bool(
+                            getattr(module_class, "supports_conv2d", True)
+                        )
+                        if is_linear or (is_conv2d and supports_conv2d):
                             original_name = (name + "." if name else "") + child_name
                             lora_name = f"{prefix}.{original_name}".replace(".", "_")
 
@@ -747,11 +791,14 @@ class LoRANetwork(torch.nn.Module):
     def get_trainable_params(self):
         return self.parameters()
 
+    def _state_dict_for_save(self):
+        return self.state_dict()
+
     def save_weights(self, file, dtype, metadata):
         if metadata is not None and len(metadata) == 0:
             metadata = None
 
-        state_dict = self.state_dict()
+        state_dict = self._state_dict_for_save()
 
         if dtype is not None:
             for key in list(state_dict.keys()):

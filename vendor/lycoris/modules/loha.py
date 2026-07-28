@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from .base import LycorisBaseModule
+from .functional import compute_merged_delta
 from ..functional.loha import diff_weight as loha_diff_weight
 
 
@@ -308,15 +309,17 @@ class LohaModule(LycorisBaseModule):
 
         base = self.org_forward(x, *args, **kwargs)
         base_weight = self._current_weight().to(x.device)
-        diff_weight = self.get_weight(self.shape).to(base_weight.dtype) * self.scalar
-
-        if self.wd:
-            new_weight = self.apply_weight_decompose(
-                base_weight + diff_weight, self.multiplier
-            )
-        else:
-            new_weight = base_weight + diff_weight * self.multiplier
-
-        delta_weight = new_weight - base_weight
+        diff_weight = self.get_weight(self.shape) * self.scalar
+        transform = (
+            (lambda weight: self.apply_weight_decompose(weight, self.multiplier))
+            if self.wd
+            else None
+        )
+        delta_weight = compute_merged_delta(
+            base_weight,
+            diff_weight,
+            self.multiplier,
+            transform,
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta

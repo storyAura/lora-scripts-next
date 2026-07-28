@@ -75,7 +75,7 @@ class AnimaFastStaticIntegrationTests(unittest.TestCase):
         self.assertIn("anima-lora-fast", data.read_text(encoding="utf-8"))
         component_text = component.read_text(encoding="utf-8")
         self.assertIn("data-anima-fast-install", component_text)
-        self.assertIn('from"./app.547295de.js?v=20260605-routefix2"', component_text)
+        self.assertIn('from"./app.547295de.js?v=', component_text)
         self.assertNotIn('from"./app.547295de.js";', component_text)
         page_text = page.read_text(encoding="utf-8")
         self.assertIn("sorryhyun/anima_lora", page_text)
@@ -129,7 +129,7 @@ class AnimaFastStaticIntegrationTests(unittest.TestCase):
         self.assertNotIn("\n  <ul>", source)
         self.assertIn('aria-hidden":"true",style:"display:none"', source)
         self.assertEqual(source.count("`") % 2, 0)
-        self.assertIn('from"./app.547295de.js?v=20260605-routefix2"', source)
+        self.assertIn('from"./app.547295de.js?v=', source)
         self.assertNotIn('from"app.547295de.js?v=', source)
         subprocess.run(["node", "--check", str(guide_js)], check=True)
 
@@ -167,7 +167,7 @@ class AnimaFastStaticIntegrationTests(unittest.TestCase):
 
     def test_frontend_dist_uses_project_version_cache_bust(self):
         version = Path("VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(version, "2.8.35")
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
 
         for path in Path("frontend/dist").rglob("*.html"):
             html = path.read_text(encoding="utf-8")

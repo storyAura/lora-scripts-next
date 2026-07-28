@@ -1,4 +1,4 @@
-accelerate==0.33.0
+accelerate==1.6.0
 transformers==4.51.3
 diffusers[torch]==0.33.1
 ftfy==6.1.1
@@ -15,7 +15,6 @@ prodigyopt==1.1.2
 tensorboard==2.10.1
 safetensors==0.4.4
 setuptools<81
-prodigy-plus-schedule-free
 # gradio==3.16.2
 altair==4.2.2
 easygui==0.98.3

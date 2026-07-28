@@ -59,45 +59,15 @@ def _ensure_gui_identity_fields(config: dict, *, page_train_type: str) -> None:
 
     lycoris_algo = config.get("lycoris_algo")
     if isinstance(lycoris_algo, str) and lycoris_algo.strip():
-        config["lora_type"] = _resolve_lora_type(config, lycoris_algo)
+        config["lora_type"] = lycoris_algo.strip().lower()
         return
 
     network_args = config.get("network_args")
     if isinstance(network_args, list):
         for item in network_args:
             if isinstance(item, str) and item.strip().lower().startswith("algo="):
-                config["lora_type"] = _resolve_lora_type(config, item.split("=", 1)[1])
+                config["lora_type"] = item.split("=", 1)[1].strip().lower()
                 return
-
-
-def _resolve_lora_type(config: dict, algo: str) -> str:
-    """Map a LyCORIS algo back to the UI lora_type branch.
-
-    T-GLoKR runs as algo=glokr; only the time-gate flag tells them apart.
-    """
-    lora_type = algo.strip().lower()
-    if lora_type != "glokr":
-        return lora_type
-
-    if _is_truthy(config.get("train_time_gates")):
-        return "tglokr"
-    for item in config.get("network_args") or []:
-        if not isinstance(item, str) or "=" not in item:
-            continue
-        key, value = item.split("=", 1)
-        if key.strip().lower() == "train_time_gates" and _is_truthy(value):
-            return "tglokr"
-    return lora_type
-
-
-def _is_truthy(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return False
 
 
 def normalize_config_for_export(

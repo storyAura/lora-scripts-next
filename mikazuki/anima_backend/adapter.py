@@ -5,6 +5,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from mikazuki.training_validation import validate_training_configuration
+from mikazuki.optimizer_configuration import normalize_optimizer_configuration
 from mikazuki.utils.config_import import ANIMA_LORA_TYPE_BRANCH_CONSTS
 
 
@@ -29,6 +31,9 @@ SUPPORTED_FIELDS = {
     "vae_chunk_size",
     "vae_disable_cache",
     "unsloth_offload_checkpointing",
+    "anima_gradient_checkpointing_mode",
+    "anima_compile_blocks",
+    "anima_compile_backend",
     "train_data_dir",
     "reg_data_dir",
     "resolution",
@@ -62,6 +67,23 @@ SUPPORTED_FIELDS = {
     "network_alpha",
     "network_dropout",
     "network_args",
+    "loraplus_lr_ratio",
+    "loraplus_unet_lr_ratio",
+    "loraplus_text_encoder_lr_ratio",
+    "vera_projection_seed",
+    "vera_save_projection",
+    "vera_d_initial",
+    "delora_lambda",
+    "waveft_n_frequency",
+    "waveft_scaling",
+    "waveft_random_loc_seed",
+    "waveft_use_idwt",
+    "waveft_wavelet_family",
+    "deft_decomposition_method",
+    "deft_alpha",
+    "deft_init_scale",
+    "deft_init_weights",
+    "moslora_mixer_init",
     "dim_from_weights",
     "scale_weight_norms",
     "train_norm",
@@ -85,6 +107,10 @@ SUPPORTED_FIELDS = {
     "multires_noise_discount",
     "fp8_base",
     "fp8_base_unet",
+    "base_model_quantization",
+    "base_model_quantization_compute_dtype",
+    "base_model_quantization_skip_modules",
+    "quantize_text_encoder",
     "cache_latents",
     "cache_latents_to_disk",
     "cache_text_encoder_outputs",
@@ -95,6 +121,8 @@ SUPPORTED_FIELDS = {
     "disable_mmap_load_safetensors",
     "blocks_to_swap",
     "cpu_offload_checkpointing",
+    "fsdp2_frozen_base",
+    "fsdp2_cpu_offload",
     "mixed_precision",
     "full_fp16",
     "full_bf16",
@@ -115,6 +143,23 @@ NETWORK_ONLY_FIELDS = {
     "network_alpha",
     "network_dropout",
     "network_args",
+    "loraplus_lr_ratio",
+    "loraplus_unet_lr_ratio",
+    "loraplus_text_encoder_lr_ratio",
+    "vera_projection_seed",
+    "vera_save_projection",
+    "vera_d_initial",
+    "delora_lambda",
+    "waveft_n_frequency",
+    "waveft_scaling",
+    "waveft_random_loc_seed",
+    "waveft_use_idwt",
+    "waveft_wavelet_family",
+    "deft_decomposition_method",
+    "deft_alpha",
+    "deft_init_scale",
+    "deft_init_weights",
+    "moslora_mixer_init",
     "dim_from_weights",
     "scale_weight_norms",
     "train_norm",
@@ -134,6 +179,7 @@ NETWORK_ONLY_FIELDS = {
     "decompose_both",
     "bypass_mode",
     "dora_wd",
+    "rs_lora",
     "rank_dropout",
     "module_dropout",
     "rank_dropout_scale",
@@ -150,8 +196,6 @@ NETWORK_ONLY_FIELDS = {
     "use_bora",
     "bora_iters",
     "train_gates",
-    "train_time_gates",
-    "time_gate_dim",
     "init_mode",
     "use_g_out",
     "g_norm_mode",
@@ -189,6 +233,67 @@ TLORA_NETWORK_ARG_FIELDS = {
     "tlora_orthogonal_init",
 }
 
+STANDARD_LORA_NETWORK_ARG_FIELDS = {
+    "loraplus_lr_ratio",
+    "loraplus_unet_lr_ratio",
+    "loraplus_text_encoder_lr_ratio",
+}
+
+PISSA_NETWORK_ARG_FIELDS = {
+    "pissa_init",
+    "pissa_method",
+    "pissa_niter",
+    "pissa_oversample",
+    "pissa_apply_conv2d",
+    "pissa_export_mode",
+}
+
+VERA_NETWORK_ARG_FIELDS = {
+    "vera_projection_seed",
+    "vera_save_projection",
+    "vera_d_initial",
+}
+
+DELORA_NETWORK_ARG_FIELDS = {
+    "delora_lambda",
+}
+
+WAVEFT_NETWORK_ARG_FIELDS = {
+    "waveft_n_frequency",
+    "waveft_scaling",
+    "waveft_random_loc_seed",
+    "waveft_use_idwt",
+    "waveft_wavelet_family",
+}
+
+DEFT_NETWORK_ARG_FIELDS = {
+    "deft_decomposition_method",
+    "deft_alpha",
+    "deft_init_scale",
+    "deft_init_weights",
+}
+
+MOSLORA_NETWORK_ARG_FIELDS = {
+    "moslora_mixer_init",
+}
+
+ANIMA_NETWORK_MODULE_ARG_FIELDS = {
+    "networks.lora_anima": (
+        STANDARD_LORA_NETWORK_ARG_FIELDS | PISSA_NETWORK_ARG_FIELDS
+    ),
+    "networks.vera_anima": VERA_NETWORK_ARG_FIELDS,
+    "networks.delora_anima": DELORA_NETWORK_ARG_FIELDS,
+    "networks.waveft_anima": WAVEFT_NETWORK_ARG_FIELDS,
+    "networks.deft_anima": DEFT_NETWORK_ARG_FIELDS,
+    "networks.moslora_anima": MOSLORA_NETWORK_ARG_FIELDS,
+}
+
+EXPLICIT_BOOLEAN_NETWORK_ARG_FIELDS = {
+    "vera_save_projection",
+    "waveft_use_idwt",
+    "deft_init_weights",
+}
+
 # LyCORIS UI fields → network_args key names.  sd-scripts only forwards
 # network_args items to lycoris.kohya.create_network(**kwargs); top-level
 # TOML keys are silently ignored.  Map UI field → LyCORIS kwarg name.
@@ -202,6 +307,7 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     "decompose_both": "decompose_both",
     "bypass_mode": "bypass_mode",
     "dora_wd": "dora_wd",
+    "rs_lora": "rs_lora",
     "full_matrix": "full_matrix",
     "rank_dropout": "rank_dropout",
     "module_dropout": "module_dropout",
@@ -215,8 +321,6 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     "use_bora": "use_bora",
     "bora_iters": "bora_iters",
     "train_gates": "train_gates",
-    "train_time_gates": "train_time_gates",
-    "time_gate_dim": "time_gate_dim",
     "init_mode": "init_mode",
     "use_g_out": "use_g_out",
     "g_norm_mode": "g_norm_mode",
@@ -334,6 +438,21 @@ def _apply_lora_type_overrides(source: dict[str, Any], warnings: list[str]) -> N
     else:
         source.pop("lycoris_algo", None)
 
+    if lora_type == "rslora":
+        source["rs_lora"] = True
+        source.pop("dora_wd", None)
+    elif lora_type == "dora":
+        source["dora_wd"] = True
+        source.pop("rs_lora", None)
+    elif lora_type == "lora_fa":
+        requested_optimizer = str(source.get("optimizer_type") or "").strip()
+        if requested_optimizer.lower() != "lorafaadamw":
+            if requested_optimizer:
+                warnings.append(
+                    f"LoRA-FA requires LoRAFAAdamW; replaced optimizer_type={requested_optimizer}"
+                )
+            source["optimizer_type"] = "LoRAFAAdamW"
+
 
 def _network_args_use_lokr(network_args: list[str]) -> bool:
     for item in network_args:
@@ -375,9 +494,17 @@ def _strip_arg(network_args: list[str], arg_key: str) -> tuple[list[str], bool]:
 def adapt_anima_config(
     config: dict[str, Any], *, finetune: bool = False
 ) -> tuple[dict[str, Any], list[str]]:
-    source = deepcopy(config)
+    optimizer_config = normalize_optimizer_configuration(deepcopy(config))
+    source = optimizer_config.values
     adapted: dict[str, Any] = {}
-    warnings: list[str] = []
+    warnings = list(optimizer_config.warnings)
+    model_train_type = "anima-finetune" if finetune else "anima-lora"
+    validate_training_configuration(source, model_train_type)
+
+    # removed T-GLoKR (time-gated GLoKR): stale fields from old autosaves/history
+    # are dropped silently instead of leaking into the TOML as unknown keys
+    source.pop("train_time_gates", None)
+    source.pop("time_gate_dim", None)
 
     if finetune:
         for key in list(source):
@@ -423,15 +550,6 @@ def adapt_anima_config(
     # passes network_args items (as **kwargs) to lycoris.kohya.create_network();
     # top-level TOML keys like use_cp, decompose_both, etc. are silently lost.
     if not finetune and source.get("network_module") == "lycoris.kohya":
-        # T-GLoKR is the tglokr UI branch of algo=glokr; the time-gate flag is what
-        # separates them. Derive it from lora_type so a stale value carried over from
-        # another branch (browser autosave) can never silently flip the algorithm.
-        lora_type = str(source.get("lora_type") or "").strip().lower()
-        if lora_type == "tglokr":
-            source["train_time_gates"] = True
-        elif lora_type:
-            source.pop("train_time_gates", None)
-
         network_args = list(source.get("network_args") or [])
         for ui_field, arg_key in LYCORIS_NETWORK_ARG_MAP.items():
             value = source.pop(ui_field, None)
@@ -466,8 +584,33 @@ def adapt_anima_config(
         if network_args:
             source["network_args"] = network_args
 
+    network_module = str(source.get("network_module") or "")
+    network_arg_fields = ANIMA_NETWORK_MODULE_ARG_FIELDS.get(network_module)
+    if not finetune and network_arg_fields is not None:
+        network_args = list(source.get("network_args") or [])
+        for field in network_arg_fields:
+            value = source.pop(field, None)
+            if field in EXPLICIT_BOOLEAN_NETWORK_ARG_FIELDS:
+                if value is not None:
+                    network_args.append(f"{field}={value}")
+            elif not _is_empty_value(value):
+                network_args.append(f"{field}={value}")
+        if network_args:
+            source["network_args"] = network_args
+
     for key, value in source.items():
-        if key in UI_ONLY_FIELDS or key in TLORA_NETWORK_ARG_FIELDS or key in LYCORIS_NETWORK_ARG_MAP:
+        if (
+            key in UI_ONLY_FIELDS
+            or key in TLORA_NETWORK_ARG_FIELDS
+            or key in STANDARD_LORA_NETWORK_ARG_FIELDS
+            or key in PISSA_NETWORK_ARG_FIELDS
+            or key in VERA_NETWORK_ARG_FIELDS
+            or key in DELORA_NETWORK_ARG_FIELDS
+            or key in WAVEFT_NETWORK_ARG_FIELDS
+            or key in DEFT_NETWORK_ARG_FIELDS
+            or key in MOSLORA_NETWORK_ARG_FIELDS
+            or key in LYCORIS_NETWORK_ARG_MAP
+        ):
             continue
         if _is_empty_value(value):
             continue

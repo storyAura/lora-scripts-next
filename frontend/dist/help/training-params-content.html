@@ -230,6 +230,10 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>优化器</th><th>特点</th><th>用法要点</th></tr>
     <tr><td><code>AdamW8bit</code></td><td>默认。AdamW 的 8bit 量化版，省显存、表现稳定</td><td>无脑可用</td></tr>
+    <tr><td><code>AdamWFused</code></td><td>PyTorch 原生 CUDA fused AdamW</td><td>仅支持 CUDA；不支持时启动前明确报错</td></tr>
+    <tr><td><code>AdamWScheduleFree / SGDScheduleFree</code></td><td>无需外部学习率调度器，保存和采样时自动切换 train/eval 状态</td><td>推荐先用 AdamWScheduleFree；SGD 版本为高级选项</td></tr>
+    <tr><td><code>PagedAdamW / PagedAdamW32bit</code></td><td>bitsandbytes 分页 32-bit AdamW，降低显存峰值</td><td>需要 CUDA 与项目固定的 bitsandbytes 版本</td></tr>
+    <tr><td><code>AdEMAMix8bit / PagedAdEMAMix8bit</code></td><td>混合短期与长期动量的 8-bit 优化器</td><td>需要 CUDA 与 bitsandbytes≥0.46.0；betas/alpha/t_alpha/t_beta3 使用结构化字段配置</td></tr>
     <tr><td><code>Automagic</code></td><td>自适应学习率（Anima 生态常用），自动逐参数调节</td><td>对初始学习率不敏感；系统会自动禁用 full_fp16/bf16 降低 NaN 风险</td></tr>
     <tr><td><code>pytorch_optimizer.CAME</code></td><td>置信度引导、内存高效，大模型训练稳定性好</td><td>同上有 NaN 护栏；显存友好</td></tr>
     <tr><td><code>Prodigy</code></td><td>自适应学习率，"免调参"路线</td><td><b>学习率填 1</b>，scheduler 用 constant；d0/d_coef 一般不动</td></tr>
@@ -246,6 +250,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><th>参数</th><th>说明</th></tr>
     <tr><td><code>min_snr_gamma</code></td><td>最小信噪比加权，启用推荐 5。主要针对 SD 系噪声预测训练；Anima（Rectified Flow）用 weighting_scheme 控制权重，此项一般留空</td></tr>
     <tr><td><code>optimizer_args_custom</code></td><td>自定义优化器参数，一行一个 <code>key=value</code>。同名参数覆盖默认值</td></tr>
+    <tr><td><code>ademamix_beta1/2/3</code>、<code>ademamix_alpha</code>、<code>ademamix_t_alpha</code>、<code>ademamix_t_beta3</code></td><td>AdEMAMix 的结构化参数；不得与 optimizer_args_custom 重复定义</td></tr>
   </table>
   </div>
 </section>
@@ -258,6 +263,10 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>network_weights</code></td><td>空</td><td>从已有 LoRA / LoKr 继续训练（只加载网络权重，不含优化器状态；完整断点续训用 save_state + resume）</td></tr>
     <tr><td><code>network_dim</code></td><td>16</td><td>网络维度（rank），"补丁的表达力"。常用 4~128，<b>不是越大越好</b>：太大易过拟合且文件大。Anima LoRA 16 起步；T-LoRA 建议 32；GLoKR 可开 32~64（参数量本身很小）</td></tr>
     <tr><td><code>network_alpha</code></td><td>16</td><td>缩放分子，实际缩放 = alpha ÷ dim。常用：等于 dim、dim/2 或 1。改 alpha 等效改学习率量级</td></tr>
+    <tr><td><code>base_model_quantization</code></td><td>none</td><td>冻结基座量化：none / int8 / nf4。当前允许 LoRA、LoRA+、LoRA-FA、VeRA，并要求 CUDA + bitsandbytes；rsLoRA、PiSSA、DoRA、LyCORIS 与其他实验算法会在启动前明确拒绝</td></tr>
+    <tr><td><code>anima_gradient_checkpointing_mode</code></td><td>standard</td><td>设为 selective 后只缓存矩阵乘法与 SDPA 等高成本算子，减少完整 block 重算；必须同时开启 gradient_checkpointing，且不能与 CPU offload 或 block swap 组合</td></tr>
+    <tr><td><code>anima_compile_blocks</code></td><td>关</td><td>逐个编译重复 DiT block，降低全模型编译的首轮成本；仅支持 Linux + CUDA + PyTorch≥2.6 + Inductor</td></tr>
+    <tr><td><code>fsdp2_frozen_base</code></td><td>关</td><td>双卡以上仅分片冻结基座、复制小型 adapter 的 FSDP2 模式；Windows 或单卡环境会明确拒绝</td></tr>
     <tr><td><code>dim_from_weights</code></td><td>关</td><td>从 network_weights 自动推断 dim</td></tr>
     <tr><td><code>scale_weight_norms</code></td><td>空</td><td>最大范数正则：限制权重"音量上限"防跑飞，如启用推荐 1</td></tr>
     <tr><td><code>train_norm</code></td><td>关</td><td>额外训练 Norm 层（Anima LoKr 下会被自动禁用以避免采样崩溃）</td></tr>

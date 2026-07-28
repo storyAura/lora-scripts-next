@@ -2,7 +2,7 @@
 """The vendored LyCORIS must stay in sync with the installed one.
 
 `pip install lycoris-lora` provides upstream LyCORIS, which has none of the local
-extension algos (glokr / tglokr / bokr / bora / gsokr / glora_boft) nor the
+extension algos (glokr / bokr / bora / gsokr / glora_boft) nor the
 Anima-specific fixes. vendor/lycoris holds the patched package so it travels with
 the repo; scripts/sync_vendored_lycoris.py copies it over the installed one.
 
@@ -44,7 +44,8 @@ class VendoredLycorisTests(unittest.TestCase):
         self.assertIn("set_current_timestep", source, "kohya.py lost the timestep hook")
 
         glokr = (sync.VENDORED / "modules" / "glokr.py").read_text(encoding="utf-8")
-        self.assertIn("train_time_gates", glokr, "glokr.py lost the T-GLoKR time gates")
+        self.assertIn("kron_rank", glokr, "glokr.py lost the multi-term Kronecker extension")
+        self.assertNotIn("train_time_gates", glokr, "T-GLoKR time gates were removed; do not reintroduce")
 
     def test_installed_lycoris_matches_the_vendored_copy(self):
         target = sync.installed_lycoris_dir()

@@ -1,10 +1,50 @@
 import unittest
 from unittest import mock
 
+from mikazuki.attention_probe import AttentionProbeResult
 from mikazuki.app.api import apply_anima_training_defaults
 
 
 class AnimaTrainingDefaultsTests(unittest.TestCase):
+    def test_anima_auto_attention_uses_functional_probe_result(self):
+        config = {
+            "mixed_precision": "bf16",
+            "optimizer_type": "AdamW8bit",
+            "attn_mode": "",
+        }
+
+        with mock.patch(
+            "mikazuki.app.api.detect_best_training_attention",
+            return_value="xformers",
+        ) as detect:
+            apply_anima_training_defaults(config, "anima-lora")
+
+        self.assertEqual(config["attn_mode"], "xformers")
+        detect.assert_called_once_with()
+
+    def test_anima_explicit_flash_fails_when_backward_probe_fails(self):
+        config = {
+            "mixed_precision": "bf16",
+            "optimizer_type": "AdamW8bit",
+            "attn_mode": "flash",
+        }
+
+        with mock.patch(
+            "mikazuki.app.api.probe_training_attention_backend",
+            return_value=AttentionProbeResult(
+                backend="flash",
+                usable=False,
+                reason="flash backward failed",
+            ),
+        ) as probe, self.assertRaisesRegex(
+            RuntimeError,
+            "explicitly requested",
+        ):
+            apply_anima_training_defaults(config, "anima-lora")
+
+        self.assertEqual(config["attn_mode"], "flash")
+        probe.assert_called_once_with("flash")
+
     def test_schema_notes_lokr_train_norm_guardrail(self):
         from pathlib import Path
 

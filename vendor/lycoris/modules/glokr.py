@@ -51,7 +51,6 @@ class GLoKRModule(LycorisBaseModule):
         "c_w1", "c_w1_a", "c_w1_b", "c_w2", "c_w2_a", "c_w2_b",
         "alpha", "dora_scale", "bora_scale_r", "bora_scale_c",
         "g_norm", "gate_b", "gate_a", "gate_c", "kron_mix", "bora_iters",
-        "time_gate_w", "time_gate_b",
     ]
     weight_list_det = ["b_w1", "b_w1_a"]  # 仅作参考, 实际检测走 algo_check 前缀匹配
 
@@ -84,8 +83,6 @@ class GLoKRModule(LycorisBaseModule):
         init_mode="kaiming",    # "kaiming" | "nkp" (Van Loan 主成分对齐初始化)
         g_norm_mode="frobenius",  # "frobenius" | "spectral" (G 路径尺度对齐所用范数)
         bora_iters=1,           # BoRA 行/列交替平衡迭代次数
-        train_time_gates=False,  # T-GLoKR: timestep 条件化路径门控 (实验特性)
-        time_gate_dim=4,        # 时间门控的正弦编码频率数 K (每模块参数 3×(2K+1))
         **kwargs,
     ):
         super().__init__(
@@ -211,21 +208,6 @@ class GLoKRModule(LycorisBaseModule):
             if kron_rank > 1:
                 self.kron_mix = nn.Parameter(torch.ones(kron_rank))
 
-        # T-GLoKR: timestep 条件化软门控 g_p(t) = 2·σ(W·φ(t)+b)。
-        # 零初始化 ⇒ g≡1, 与不开启时逐位一致 (恒等起点)。当前 t 由
-        # network.set_current_timestep() 在每个训练/采样 step 前注入;
-        # t 不可用时回退 g≡1, 永不崩溃。
-        self.train_time_gates = bool(train_time_gates)
-        self.current_timestep = None
-        if self.train_time_gates:
-            k = max(1, int(time_gate_dim))
-            # persistent=False: 由 time_gate_dim 确定性重建, 不进存档
-            self.register_buffer(
-                "time_gate_freqs", math.pi * (2.0 ** torch.arange(k, dtype=torch.float32)), persistent=False
-            )
-            self.time_gate_w = nn.Parameter(torch.zeros(3, 2 * k))
-            self.time_gate_b = nn.Parameter(torch.zeros(3))
-
         self.register_buffer("alpha", torch.tensor(alpha * (lora_dim / r_factor)))
 
         if use_scalar:
@@ -266,31 +248,6 @@ class GLoKRModule(LycorisBaseModule):
             a, b = a.to(dtype), b.to(dtype)
         return a @ b
 
-    def _time_gate(self, path):
-        """T-GLoKR 时间门控 g_p(t) ∈ (0, 2)。t 不可用时返回 None (等效 g≡1)。"""
-        if not getattr(self, "train_time_gates", False):
-            return None
-        t = getattr(self, "current_timestep", None)
-        if t is None:
-            return None
-        if not torch.is_tensor(t):
-            t = torch.tensor(float(t))
-        t = t.detach().float().reshape(-1)
-        if t.numel() == 0:
-            return None
-        if float(t.max()) > 1.0:
-            t = t / 1000.0
-        # 门控全程 fp32: 模块 .to(bf16) 会把 freqs buffer 一并降精度, 与显式 .float()
-        # 的门控权重点乘会 dtype 不符而报错; 且 27 个参数用 fp32 的开销可忽略。
-        freqs = self.time_gate_freqs.float()
-        # 权重级门控: batch 内取均值 (本项目默认 batch_size=1 时即逐样本精确)
-        tv = t.clamp(0.0, 1.0).mean().to(freqs.device)
-        angles = freqs * tv
-        phi = torch.cat([torch.sin(angles), torch.cos(angles)])
-        idx = {"b": 0, "a": 1, "c": 2}[path]
-        z = torch.dot(self.time_gate_w[idx].float(), phi) + self.time_gate_b[idx].float()
-        return 2.0 * torch.sigmoid(z)
-
     def _eff_scale(self, path):
         scale = self.path_scale[path]
         if path in ("a", "c"):
@@ -298,9 +255,6 @@ class GLoKRModule(LycorisBaseModule):
         gate = getattr(self, f"gate_{path}", None)
         if gate is not None:
             scale = scale * gate
-        time_gate = self._time_gate(path)
-        if time_gate is not None:
-            scale = scale * time_gate
         return scale
 
     # ------------------------------------------------------------------
@@ -535,9 +489,6 @@ class GLoKRModule(LycorisBaseModule):
             destination["g_norm"] = self.g_norm
         if hasattr(self, "kron_mix"):
             destination["kron_mix"] = self.kron_mix
-        if getattr(self, "train_time_gates", False):
-            destination["time_gate_w"] = self.time_gate_w
-            destination["time_gate_b"] = self.time_gate_b
         for p in self.paths:
             gate = getattr(self, f"gate_{p}", None)
             if gate is not None:
@@ -554,8 +505,7 @@ class GLoKRModule(LycorisBaseModule):
 
     def load_weight_hook(self, module: nn.Module, incompatible_keys):
         missing_keys = list(incompatible_keys.missing_keys)
-        # time_gate: 旧存档无该键 ⇒ 保持零初始化 (g≡1), 双向兼容
-        handled = ("scalar", "g_norm", "bora_iters", "time_gate")
+        handled = ("scalar", "g_norm", "bora_iters")
         incompatible_keys.missing_keys[:] = [
             k for k in missing_keys if not any(h in k for h in handled)
         ]
@@ -649,8 +599,6 @@ class GLoKRModule(LycorisBaseModule):
         use_g = any(k.startswith("a_w") for k in weights)
         use_g_out = any(k.startswith("c_w") for k in weights)
         train_gates = "gate_b" in weights
-        train_time_gates = "time_gate_w" in weights
-        time_gate_dim = weights["time_gate_w"].size(1) // 2 if train_time_gates else 4
 
         lora_dim = None
         for name in ("b_w1_a", "b_w2_a", "a_w1_a", "a_w2_a", "c_w1_a", "c_w2_a"):
@@ -690,8 +638,6 @@ class GLoKRModule(LycorisBaseModule):
             use_g_out=use_g_out,
             train_gates=train_gates,
             bora_iters=int(weights["bora_iters"]) if "bora_iters" in weights else 1,
-            train_time_gates=train_time_gates,
-            time_gate_dim=time_gate_dim,
         )
         module.load_state_dict(weights, strict=False)
         return module

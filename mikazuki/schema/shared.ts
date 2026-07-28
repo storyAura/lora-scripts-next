@@ -138,10 +138,17 @@
             Schema.object({
                 optimizer_type: Schema.union([
                     "AdamW",
+                    "AdamWFused",
                     "AdamW8bit",
                     "Automagic",
                     "EmoSens",
+                    "AdamWScheduleFree",
+                    "SGDScheduleFree",
+                    "PagedAdamW",
+                    "PagedAdamW32bit",
                     "PagedAdamW8bit",
+                    "AdEMAMix8bit",
+                    "PagedAdEMAMix8bit",
                     "RAdamScheduleFree",
                     "Lion",
                     "Lion8bit",
@@ -161,6 +168,19 @@
                 ]).default("AdamW8bit").description("优化器设置"),
                 min_snr_gamma: Schema.number().step(0.1).description("最小信噪比伽马值, 如果启用推荐为 5"),
             }),
+
+            Schema.union([
+                Schema.object({
+                    optimizer_type: Schema.union(["AdEMAMix8bit", "PagedAdEMAMix8bit"]).required(),
+                    ademamix_beta1: Schema.number().min(0).max(0.999999).default(0.9).description("AdEMAMix 短期动量 beta1"),
+                    ademamix_beta2: Schema.number().min(0).max(0.999999).default(0.999).description("AdEMAMix 二阶动量 beta2"),
+                    ademamix_beta3: Schema.number().min(0).max(0.999999).default(0.9999).description("AdEMAMix 长期动量 beta3"),
+                    ademamix_alpha: Schema.number().min(0).default(5).description("长期动量的最终混合权重"),
+                    ademamix_t_alpha: Schema.number().min(1).step(1).description("alpha 预热步数；留空使用优化器默认"),
+                    ademamix_t_beta3: Schema.number().min(1).step(1).description("beta3 预热步数；留空使用优化器默认"),
+                }),
+                Schema.object({}),
+            ]),
 
             Schema.union([
                 Schema.object({
@@ -308,6 +328,8 @@
         DISTRIBUTED_TRAINING: Schema.object({
             ddp_timeout: Schema.number().min(0).description("分布式训练超时时间"),
             ddp_gradient_as_bucket_view: Schema.boolean(),
+            fsdp2_frozen_base: Schema.boolean().default(false).description("Linux 双卡实验功能：仅用 PyTorch FSDP2 分片冻结的 DiT/U-Net，LoRA adapter 继续由 Accelerate/DDP 管理，确保常规 adapter 保存与恢复"),
+            fsdp2_cpu_offload: Schema.boolean().default(false).description("将 FSDP2 冻结基座分片卸载到 pinned CPU RAM；更省显存但会增加 PCIe 传输"),
         }).description("分布式训练"),
 
     }

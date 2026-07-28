@@ -14,7 +14,7 @@ Schema.intersect([
         qwen3_max_token_length: Schema.number().step(1).default(512).description("Qwen3 最大 token 长度"),
         timestep_sampling: Schema.union(["sigma", "uniform", "sigmoid", "shift", "flux_shift"]).default("shift").description("时间步采样"),
         discrete_flow_shift: Schema.number().step(0.001).default(3.0).description("Rectified Flow 位移"),
-        attn_mode: Schema.union(["", "torch", "xformers", "sageattn", "flash"]).default("").description("Attention 加速实现。留空使用 torch 保底，避免 flash-attn 缺失导致预检查失败；手动选择 flash 需要插件环境已安装 flash-attn 且显卡支持"),
+        attn_mode: Schema.union(["", "torch", "xformers", "flash"]).default("").description("Attention 加速实现。留空使用 torch 保底，避免 flash-attn 缺失导致预检查失败；手动选择 flash 需要插件环境已安装 flash-attn 且显卡支持"),
         torch_compile: Schema.boolean().default(true).description("启用 torch.compile"),
         static_token_count: Schema.number().min(1).default(4096).description("静态 token 上限；1024×1024 为 4096，1536×1536 为 9216。torch.compile 开启时后端会按分辨率自动抬高，但高分辨率会显著增加显存占用"),
         compile_mode: Schema.union(["blocks", "full"]).default("blocks").description("compile 模式（推荐 blocks）。full 与「梯度检查点」互斥，不能同时开启"),

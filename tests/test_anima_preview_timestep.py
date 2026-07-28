@@ -107,12 +107,11 @@ class TLoraMaskRespondsToInjectedSigmaTests(unittest.TestCase):
         module, network = self._module()
         self.assertEqual(self._active_rank(module, network, 0.0), 8)
 
-    def test_without_timestep_mask_is_disabled(self):
+    def test_without_timestep_fails_instead_of_silently_using_full_rank(self):
         module, network = self._module()
         network.current_timestep = None
-        mask, scale = module._get_tlora_rank_mask_and_scale(torch.zeros(1, 8))
-        self.assertIsNone(mask)
-        self.assertIsNone(scale)
+        with self.assertRaisesRegex(RuntimeError, "set_current_timestep"):
+            module._get_tlora_rank_mask_and_scale(torch.zeros(1, 8))
 
 
 if __name__ == "__main__":

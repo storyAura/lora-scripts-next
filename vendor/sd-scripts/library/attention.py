@@ -34,6 +34,10 @@ except ImportError:
     sdpa_kernel = None
 
 
+class UnsupportedTrainingAttentionError(RuntimeError):
+    pass
+
+
 def _sdpa_backend_context(attn_mode: Optional[str]):
     """mem_efficient = 强制 PyTorch memory-efficient SDPA kernel（PyTorch Efficient SDPA）。
 
@@ -144,6 +148,10 @@ def attention(
         assert k is not None and v is not None, "k and v must be provided if qkv_or_q is a tensor"
     if attn_params is None:
         attn_params = AttentionParams.create_attention_params("torch", False)
+    if attn_params.attn_mode == "sageattn":
+        raise UnsupportedTrainingAttentionError(
+            "attn_mode='sageattn' is invalid: standard SageAttention does not support training backward"
+        )
 
     # If split attn is False, attention mask is provided and all sequence lengths are same, we can trim the sequence
     seqlen_trimmed = False

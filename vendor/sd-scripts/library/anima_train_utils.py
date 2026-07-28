@@ -32,6 +32,25 @@ logger = logging.getLogger(__name__)
 def add_anima_training_arguments(parser: argparse.ArgumentParser):
     """Add Anima-specific training arguments to the parser."""
     parser.add_argument(
+        "--anima_gradient_checkpointing_mode",
+        type=str,
+        default="standard",
+        choices=["standard", "selective"],
+        help="Anima activation checkpointing policy: full block recomputation or selective expensive-op caching",
+    )
+    parser.add_argument(
+        "--anima_compile_blocks",
+        action="store_true",
+        help="compile only repeated Anima block _forward regions on supported Linux CUDA environments",
+    )
+    parser.add_argument(
+        "--anima_compile_backend",
+        type=str,
+        default="inductor",
+        choices=["inductor"],
+        help="backend for Anima regional block compilation",
+    )
+    parser.add_argument(
         "--qwen3",
         type=str,
         default=None,
@@ -112,10 +131,10 @@ def add_anima_training_arguments(parser: argparse.ArgumentParser):
     )
     parser.add_argument(
         "--attn_mode",
-        choices=["torch", "mem_efficient", "xformers", "flash", "sageattn", "sdpa"],  # "sdpa" is for backward compatibility
+        choices=["torch", "mem_efficient", "xformers", "flash", "sdpa"],  # "sdpa" is for backward compatibility
         default=None,
-        help="Attention implementation to use. Default is None (torch). xformers requires --split_attn. sageattn does not support training (inference only). This option overrides --xformers or --sdpa."
-        " / 使用するAttentionの実装。デフォルトはNone（torch）です。xformersは--split_attnの指定が必要です。sageattnはトレーニングをサポートしていません（推論のみ）。このオプションは--xformersまたは--sdpaを上書きします。",
+        help="Attention implementation to use. Default is None (torch). xformers requires --split_attn. This option overrides --xformers or --sdpa."
+        " / 使用するAttentionの実装。デフォルトはNone（torch）です。xformersは--split_attnの指定が必要です。このオプションは--xformersまたは--sdpaを上書きします。",
     )
     parser.add_argument(
         "--split_attn",

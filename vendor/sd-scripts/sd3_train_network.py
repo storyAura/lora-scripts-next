@@ -12,7 +12,17 @@ from library.safetensors_utils import load_safetensors
 
 init_ipex()
 
-from library import flux_models, flux_train_utils, flux_utils, sd3_train_utils, sd3_utils, strategy_base, strategy_sd3, train_util
+from library import (
+    base_model_quantization,
+    flux_models,
+    flux_train_utils,
+    flux_utils,
+    sd3_train_utils,
+    sd3_utils,
+    strategy_base,
+    strategy_sd3,
+    train_util,
+)
 import train_network
 from library.utils import setup_logging
 
@@ -38,6 +48,19 @@ class Sd3NetworkTrainer(train_network.NetworkTrainer):
 
         if args.fp8_base_unet:
             args.fp8_base = True  # if fp8_base_unet is enabled, fp8_base is also enabled for SD3
+
+        base_model_quantization.validate_base_model_quantization_training_request(
+            args.base_model_quantization,
+            args.base_model_quantization_compute_dtype,
+            "sd3",
+            args.network_module,
+            bool(args.fp8_base),
+            bool(args.fp8_base_unet),
+            args.blocks_to_swap,
+        )
+        base_model_quantization.normalize_skip_module_patterns(
+            args.base_model_quantization_skip_modules
+        )
 
         if args.cache_text_encoder_outputs_to_disk and not args.cache_text_encoder_outputs:
             logger.warning(
@@ -104,6 +127,27 @@ class Sd3NetworkTrainer(train_network.NetworkTrainer):
                     " / SD3モデルをfp8に変換しています。これには時間がかかる場合があります。fp8チェックポイントを使用することで時間を短縮できます。"
                 )
                 mmdit.to(torch.float8_e4m3fn)
+        if args.base_model_quantization != "none":
+            mmdit.requires_grad_(False)
+            quantization_report = base_model_quantization.quantize_model_for_lora(
+                mmdit,
+                "sd3",
+                args.base_model_quantization,
+                args.base_model_quantization_compute_dtype,
+                base_model_quantization.normalize_skip_module_patterns(
+                    args.base_model_quantization_skip_modules
+                ),
+            )
+            logger.info(
+                "Quantized frozen SD3 DiT",
+                extra={
+                    "quantization_mode": quantization_report.mode,
+                    "converted_module_count": len(quantization_report.converted_modules),
+                    "skipped_module_count": len(quantization_report.skipped_modules),
+                    "original_weight_bytes": quantization_report.original_weight_bytes,
+                    "estimated_quantized_weight_bytes": quantization_report.estimated_quantized_weight_bytes,
+                },
+            )
         self.is_swapping_blocks = args.blocks_to_swap is not None and args.blocks_to_swap > 0
         if self.is_swapping_blocks:
             # Swap blocks between CPU and GPU to reduce memory usage, in forward and backward passes.
@@ -136,6 +180,27 @@ class Sd3NetworkTrainer(train_network.NetworkTrainer):
                 raise ValueError(f"Unsupported fp8 model dtype: {t5xxl.dtype}")
             elif t5xxl.dtype == torch.float8_e4m3fn:
                 logger.info("Loaded fp8 T5XXL model")
+        if args.base_model_quantization != "none" and args.quantize_text_encoder:
+            skip_patterns = base_model_quantization.normalize_skip_module_patterns(
+                args.base_model_quantization_skip_modules
+            )
+            for text_encoder_index, text_encoder in enumerate((clip_l, clip_g, t5xxl)):
+                text_encoder.requires_grad_(False)
+                text_encoder_report = base_model_quantization.quantize_text_encoder_for_lora(
+                    text_encoder,
+                    args.base_model_quantization,
+                    args.base_model_quantization_compute_dtype,
+                    skip_patterns,
+                )
+                logger.info(
+                    "Quantized frozen SD3 text encoder",
+                    extra={
+                        "text_encoder_index": text_encoder_index,
+                        "quantization_mode": text_encoder_report.mode,
+                        "converted_module_count": len(text_encoder_report.converted_modules),
+                        "skipped_module_count": len(text_encoder_report.skipped_modules),
+                    },
+                )
 
         vae = sd3_utils.load_vae(
             args.vae, weight_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors, state_dict=state_dict

@@ -14,21 +14,18 @@ import torch
 
 from library.utils import setup_logging
 from networks import lora_anima as anima_lora
-from networks.tlora import TLoRAInfModule, TLoRAModule, _normalize_schedule, _parse_bool_arg
+from networks.tlora import (
+    TLoRAInfModule,
+    TLoRAModule,
+    _normalize_schedule,
+    _parse_bool_arg,
+    _parse_positive_int_arg,
+)
 
 setup_logging()
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_string_bool(value, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() == "true"
-
 
 class TLoRAAnimaNetwork(anima_lora.LoRANetwork):
     TRAIN_NORM_PREFIX_ANIMA = anima_lora.LoRANetwork.LORA_PREFIX_ANIMA
@@ -48,19 +45,26 @@ class TLoRAAnimaNetwork(anima_lora.LoRANetwork):
     ):
         self.current_timestep = None
         self.train_norm = train_norm
-        self.tlora_min_rank = int(tlora_min_rank if tlora_min_rank is not None else 1)
+        self.tlora_min_rank = _parse_positive_int_arg(
+            tlora_min_rank if tlora_min_rank is not None else 1,
+            "tlora_min_rank",
+        )
         self.tlora_rank_schedule = _normalize_schedule(tlora_rank_schedule)
         self.tlora_orthogonal_init = _parse_bool_arg(tlora_orthogonal_init, default=False)
 
-        if module_class is None:
-            module_class = partial(
-                TLoRAModule,
-                tlora_min_rank=self.tlora_min_rank,
-                tlora_rank_schedule=self.tlora_rank_schedule,
-                tlora_orthogonal_init=self.tlora_orthogonal_init,
-            )
+        base_module_class = TLoRAModule if module_class is None else module_class
+        module_class = partial(
+            base_module_class,
+            tlora_min_rank=self.tlora_min_rank,
+            tlora_rank_schedule=self.tlora_rank_schedule,
+            tlora_orthogonal_init=self.tlora_orthogonal_init,
+        )
+        module_class.supports_conv2d = False
 
-        super().__init__(text_encoders, unet, *args, module_class=module_class, **kwargs)
+        # T-LoRA is defined for the diffusion transformer only. Creating
+        # ordinary, non-timestep-aware text-encoder adapters under the same
+        # checkpoint would silently mix two algorithms.
+        super().__init__(None, unet, *args, module_class=module_class, **kwargs)
         self.adapter_type = "tlora"
 
         if not hasattr(self, "text_encoder_norms"):
@@ -73,6 +77,25 @@ class TLoRAAnimaNetwork(anima_lora.LoRANetwork):
 
     def clear_current_timestep(self):
         self.current_timestep = None
+
+    def is_mergeable(self):
+        return False
+
+    def merge_to(self, text_encoders, unet, weights_sd, dtype=None, device=None):
+        raise RuntimeError(
+            "T-LoRA cannot be merged into one static weight because its "
+            "effective rank depends on the current diffusion timestep"
+        )
+
+    def save_weights(self, file, dtype, metadata):
+        owned_metadata = dict(metadata or {})
+        owned_metadata["ss_adapter_algorithm"] = "timestep_lora"
+        owned_metadata["ss_tlora_min_rank"] = str(self.tlora_min_rank)
+        owned_metadata["ss_tlora_rank_schedule"] = self.tlora_rank_schedule
+        owned_metadata["ss_tlora_orthogonal_init"] = str(
+            self.tlora_orthogonal_init
+        ).lower()
+        super().save_weights(file, dtype, owned_metadata)
 
     def apply_to(self, text_encoders, unet, apply_text_encoder=True, apply_unet=True):
         if apply_text_encoder:
@@ -117,7 +140,10 @@ def create_network(
     train_norm = _parse_bool_arg(kwargs.get("train_norm", None), default=False)
 
     train_llm_adapter = kwargs.get("train_llm_adapter", "false")
-    train_llm_adapter = _parse_string_bool(train_llm_adapter, default=False)
+    train_llm_adapter = _parse_bool_arg(
+        train_llm_adapter,
+        default=False,
+    )
 
     exclude_patterns = kwargs.get("exclude_patterns", None)
     if exclude_patterns is None:
@@ -145,13 +171,19 @@ def create_network(
     if module_dropout is not None:
         module_dropout = float(module_dropout)
 
-    tlora_min_rank = kwargs.get("tlora_min_rank", 1)
-    if tlora_min_rank is not None:
-        tlora_min_rank = int(tlora_min_rank)
-    tlora_rank_schedule = _normalize_schedule(kwargs.get("tlora_rank_schedule", "cosine"))
+    tlora_min_rank = _parse_positive_int_arg(
+        kwargs.get("tlora_min_rank", 1),
+        "tlora_min_rank",
+    )
+    tlora_rank_schedule = _normalize_schedule(
+        kwargs.get("tlora_rank_schedule", "cosine")
+    )
     tlora_orthogonal_init = _parse_bool_arg(kwargs.get("tlora_orthogonal_init", False), default=False)
 
-    verbose = _parse_string_bool(kwargs.get("verbose", "false"), default=False)
+    verbose = _parse_bool_arg(
+        kwargs.get("verbose", "false"),
+        default=False,
+    )
 
     def parse_kv_pairs(kv_pair_str: str, is_int: bool) -> Dict[str, float]:
         pairs = {}
@@ -160,15 +192,22 @@ def create_network(
             if not pair:
                 continue
             if "=" not in pair:
-                logger.warning(f"Invalid format: {pair}, expected 'key=value'")
-                continue
+                raise ValueError(
+                    f"Invalid network override {pair!r}; expected 'key=value'"
+                )
             key, value = pair.split("=", 1)
             key = key.strip()
             value = value.strip()
+            if not key:
+                raise ValueError(
+                    f"Invalid network override {pair!r}; key must not be empty"
+                )
             try:
                 pairs[key] = int(value) if is_int else float(value)
-            except ValueError:
-                logger.warning(f"Invalid value for {key}: {value}")
+            except ValueError as error:
+                raise ValueError(
+                    f"Invalid network override value for {key!r}: {value!r}"
+                ) from error
         return pairs
 
     network_reg_lrs = kwargs.get("network_reg_lrs", None)
@@ -230,9 +269,6 @@ def create_network_from_weights(multiplier, file, ae, text_encoders, unet, weigh
             continue
 
         lora_name = key.split(".")[0]
-        if lora_name.startswith(anima_lora.TRAIN_NORM_PREFIX_ANIMA) or lora_name.startswith(anima_lora.TRAIN_NORM_PREFIX_TEXT_ENCODER):
-            train_norm = True
-            continue
         if "alpha" in key:
             modules_alpha[lora_name] = value
         elif "lora_down" in key:
@@ -245,10 +281,29 @@ def create_network_from_weights(multiplier, file, ae, text_encoders, unet, weigh
         if key not in modules_alpha:
             modules_alpha[key] = modules_dim[key]
 
-    tlora_min_rank = kwargs.get("tlora_min_rank", 1)
-    if tlora_min_rank is not None:
-        tlora_min_rank = int(tlora_min_rank)
-    tlora_rank_schedule = _normalize_schedule(kwargs.get("tlora_rank_schedule", "cosine"))
+    stored_min_rank = next(
+        (
+            int(value.item())
+            for key, value in weights_sd.items()
+            if key.endswith(".tlora_min_rank_state")
+        ),
+        1,
+    )
+    stored_schedule = next(
+        (
+            "linear" if int(value.item()) == 0 else "cosine"
+            for key, value in weights_sd.items()
+            if key.endswith(".tlora_rank_schedule_state")
+        ),
+        "cosine",
+    )
+    tlora_min_rank = _parse_positive_int_arg(
+        kwargs.get("tlora_min_rank", stored_min_rank),
+        "tlora_min_rank",
+    )
+    tlora_rank_schedule = _normalize_schedule(
+        kwargs.get("tlora_rank_schedule", stored_schedule)
+    )
     tlora_orthogonal_init = _parse_bool_arg(kwargs.get("tlora_orthogonal_init", False), default=False)
 
     module_class = TLoRAInfModule if for_inference else None

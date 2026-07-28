@@ -5022,8 +5022,24 @@ def get_optimizer(args, trainable_params) -> tuple[str, str, object]:
     optimizer_kwargs = {}
     if args.optimizer_args is not None and len(args.optimizer_args) > 0:
         for arg in args.optimizer_args:
-            key, value = arg.split("=")
-            value = ast.literal_eval(value)
+            if not isinstance(arg, str) or "=" not in arg:
+                raise ValueError(
+                    "optimizer_args entries must use key=value syntax, "
+                    f"received {arg!r}"
+                )
+            key, value = arg.split("=", 1)
+            key = key.strip()
+            if not key:
+                raise ValueError(
+                    f"optimizer_args key must be non-empty, received {arg!r}"
+                )
+            try:
+                value = ast.literal_eval(value)
+            except (SyntaxError, ValueError) as error:
+                raise ValueError(
+                    f"optimizer_args value for {key!r} is not a valid "
+                    f"Python literal: {value!r}"
+                ) from error
 
             # value = value.split(",")
             # for i in range(len(value)):
@@ -5051,6 +5067,43 @@ def get_optimizer(args, trainable_params) -> tuple[str, str, object]:
         logger.info(f"use Lion optimizer | {optimizer_kwargs}")
         optimizer_class = lion_pytorch.Lion
         optimizer = optimizer_class(trainable_params, lr=lr, **optimizer_kwargs)
+
+    elif optimizer_type in {
+        "ademamix8bit",
+        "pagedademamix8bit",
+        "bitsandbytes.optim.ademamix8bit",
+        "bitsandbytes.optim.pagedademamix8bit",
+    }:
+        try:
+            import bitsandbytes as bnb
+        except ImportError as error:
+            raise ImportError(
+                "AdEMAMix8bit requires bitsandbytes==0.46.0"
+            ) from error
+        installed_version = Version(str(bnb.__version__))
+        required_version = Version("0.46.0")
+        if installed_version < required_version:
+            raise RuntimeError(
+                "AdEMAMix8bit requires bitsandbytes>=0.46.0, "
+                f"installed version is {installed_version}"
+            )
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                f"{args.optimizer_type} requires a CUDA device with the "
+                f"bitsandbytes 0.46.0 backend; torch.cuda.is_available() is false"
+            )
+        if optimizer_type.endswith("pagedademamix8bit"):
+            optimizer_class = bnb.optim.PagedAdEMAMix8bit
+        else:
+            optimizer_class = bnb.optim.AdEMAMix8bit
+        logger.info(
+            f"use {optimizer_class.__name__} optimizer | {optimizer_kwargs}"
+        )
+        optimizer = optimizer_class(
+            trainable_params,
+            lr=lr,
+            **optimizer_kwargs,
+        )
 
     elif optimizer_type.endswith("8bit".lower()):
         try:
@@ -5275,9 +5328,45 @@ def get_optimizer(args, trainable_params) -> tuple[str, str, object]:
         optimizer = optimizer_class(trainable_params, lr=lr if lr is not None else 1.0, **optimizer_kwargs)
 
     elif optimizer_type == "AdamW".lower():
+        if optimizer_kwargs.get("fused") is True and not torch.cuda.is_available():
+            raise RuntimeError(
+                "AdamW fused=True requires CUDA, but "
+                "torch.cuda.is_available() is false"
+            )
         logger.info(f"use AdamW optimizer | {optimizer_kwargs}")
         optimizer_class = torch.optim.AdamW
         optimizer = optimizer_class(trainable_params, lr=lr, **optimizer_kwargs)
+
+    elif optimizer_type == "LoRAFAAdamW".lower():
+        from networks.lora_fa_anima import LoRAFAAdamW
+
+        if lr is None:
+            raise ValueError("LoRAFAAdamW requires an explicit learning rate")
+        options = dict(optimizer_kwargs)
+        betas = options.pop("betas", (0.9, 0.999))
+        eps = float(options.pop("eps", 1e-6))
+        weight_decay = float(options.pop("weight_decay", 0.0))
+        correct_bias = bool(options.pop("correct_bias", True))
+        damping = float(options.pop("damping", 1e-8))
+        if options:
+            raise ValueError(
+                "LoRAFAAdamW received unsupported optimizer_args: "
+                + ", ".join(sorted(options))
+            )
+        optimizer_class = LoRAFAAdamW
+        logger.info(
+            "use LoRAFAAdamW optimizer with frozen A matrices and "
+            "closed-form B-gradient correction"
+        )
+        optimizer = optimizer_class(
+            trainable_params,
+            lr=float(lr),
+            betas=tuple(betas),
+            eps=eps,
+            weight_decay=weight_decay,
+            correct_bias=correct_bias,
+            damping=damping,
+        )
 
     elif optimizer_type.endswith("schedulefree".lower()):
         try:

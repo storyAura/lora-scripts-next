@@ -35,6 +35,7 @@ from mikazuki.anima_fast_backend.progress import (
     metrics_from_anima_events,
     read_jsonl_events,
 )
+from mikazuki.file_scan_cache import DirectoryScanCache, FileSnapshot
 
 
 HOST = os.environ.get("TRAIN_MONITOR_HOST", "127.0.0.1")
@@ -44,6 +45,7 @@ GUI_API = f"http://127.0.0.1:{_GUI_API_PORT}/api"
 STATIC_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = REPO / "output"
 LOG_DIR = REPO / "logs"
+_FILE_SCAN_CACHE = DirectoryScanCache(2.0, time.monotonic)
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 PROGRESS_STALL_SECONDS = 120
 GPU_IDLE_MEMORY_MB = 512
@@ -172,7 +174,33 @@ def resolve_repo_path(value: str | None) -> Path | None:
 # File scanning
 # ---------------------------------------------------------------------------
 
-MODEL_FILE_GLOBS = ("*.safetensors", "*.ckpt", "*.pt")
+MODEL_FILE_EXTENSIONS = {".safetensors", ".ckpt", ".pt"}
+RECENT_FILE_EXTENSIONS = MODEL_FILE_EXTENSIONS | {".toml", ".json"}
+
+
+def _path_contains(parent: Path, child: Path) -> bool:
+    return child == parent or parent in child.parents
+
+
+def _snapshots_under(root: Path) -> tuple[FileSnapshot, ...]:
+    resolved = root.resolve()
+    shared_roots = (OUTPUT_DIR.resolve(), LOG_DIR.resolve())
+    scan_root = next(
+        (
+            shared_root
+            for shared_root in shared_roots
+            if _path_contains(shared_root, resolved)
+        ),
+        resolved,
+    )
+    snapshots = _FILE_SCAN_CACHE.scan(scan_root)
+    if scan_root == resolved:
+        return snapshots
+    return tuple(
+        snapshot
+        for snapshot in snapshots
+        if _path_contains(resolved, snapshot.path)
+    )
 
 
 def _parse_epoch_from_name(name: str) -> int | None:
@@ -192,8 +220,8 @@ def _parse_epoch_from_name(name: str) -> int | None:
     return None
 
 
-def _model_file_entry(path: Path) -> dict:
-    st = path.stat()
+def _model_file_entry(snapshot: FileSnapshot) -> dict:
+    path = snapshot.path
     try:
         rel_path = str(path.relative_to(REPO)).replace("\\", "/")
     except ValueError:
@@ -205,9 +233,9 @@ def _model_file_entry(path: Path) -> dict:
     return {
         "name": path.name,
         "path": str(path),
-        "size": human_size(st.st_size),
-        "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-        "mtime_ts": st.st_mtime,
+        "size": human_size(snapshot.size),
+        "mtime": datetime.fromtimestamp(snapshot.mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        "mtime_ts": snapshot.mtime,
         "rel_path": rel_path,
         "folder": folder,
         "ext": path.suffix.lower(),
@@ -218,32 +246,33 @@ def _model_file_entry(path: Path) -> dict:
 def newest_model_files(root: Path, limit: int = 12) -> list[dict]:
     if not root.exists():
         return []
-    files: list[Path] = []
-    for pattern in MODEL_FILE_GLOBS:
-        files.extend(root.rglob(pattern))
-    files = [p for p in files if p.is_file()]
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return [_model_file_entry(p) for p in files[:limit]]
+    snapshots = [
+        snapshot
+        for snapshot in _snapshots_under(root)
+        if snapshot.path.suffix.lower() in MODEL_FILE_EXTENSIONS
+    ]
+    snapshots.sort(key=lambda snapshot: snapshot.mtime, reverse=True)
+    return [_model_file_entry(snapshot) for snapshot in snapshots[:limit]]
 
 
 def newest_files(root: Path, limit: int = 8) -> list[dict]:
     if not root.exists():
         return []
-    patterns = ("*.safetensors", "*.ckpt", "*.pt", "*.toml", "*.json")
-    files: list[Path] = []
-    for pattern in patterns:
-        files.extend(root.rglob(pattern))
-    files = [p for p in files if p.is_file()]
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    snapshots = [
+        snapshot
+        for snapshot in _snapshots_under(root)
+        if snapshot.path.suffix.lower() in RECENT_FILE_EXTENSIONS
+    ]
+    snapshots.sort(key=lambda snapshot: snapshot.mtime, reverse=True)
     out = []
-    for p in files[:limit]:
-        st = p.stat()
+    for snapshot in snapshots[:limit]:
+        path = snapshot.path
         out.append({
-            "name": p.name,
-            "path": str(p),
-            "size": human_size(st.st_size),
-            "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-            "mtime_ts": st.st_mtime,
+            "name": path.name,
+            "path": str(path),
+            "size": human_size(snapshot.size),
+            "mtime": datetime.fromtimestamp(snapshot.mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "mtime_ts": snapshot.mtime,
         })
     return out
 
@@ -296,24 +325,25 @@ def newest_preview_images(
         except ValueError:
             max_epochs = 0
 
-    def _collect(name_filter: str) -> dict[str, Path]:
-        newest_by_name: dict[str, Path] = {}
+    def _collect(name_filter: str) -> dict[str, FileSnapshot]:
+        newest_by_name: dict[str, FileSnapshot] = {}
         roots: list[Path] = []
         if output_dir is not None:
-            roots.extend([output_dir / "sample", output_dir])
+            roots.append(output_dir)
         else:
-            roots.extend([OUTPUT_DIR / "sample", OUTPUT_DIR, LOG_DIR])
+            roots.extend([OUTPUT_DIR, LOG_DIR])
         for root in roots:
             if not root.exists():
                 continue
-            for p in root.rglob("*"):
-                if not p.is_file() or p.suffix.lower() not in IMAGE_EXTENSIONS:
+            for snapshot in _snapshots_under(root):
+                path = snapshot.path
+                if path.suffix.lower() not in IMAGE_EXTENSIONS:
                     continue
-                if name_filter and not p.name.startswith(name_filter):
+                if name_filter and not path.name.startswith(name_filter):
                     continue
-                old = newest_by_name.get(p.name)
-                if old is None or p.stat().st_mtime >= old.stat().st_mtime:
-                    newest_by_name[p.name] = p
+                old = newest_by_name.get(path.name)
+                if old is None or snapshot.mtime >= old.mtime:
+                    newest_by_name[path.name] = snapshot
         return newest_by_name
 
     newest_by_name = _collect(output_name)
@@ -321,26 +351,26 @@ def newest_preview_images(
         newest_by_name = _collect("")
 
     all_files = list(newest_by_name.values())
-    all_files.sort(key=lambda p: p.stat().st_mtime)
-    selected: list[Path] = []
+    all_files.sort(key=lambda snapshot: snapshot.mtime)
+    selected: list[FileSnapshot] = []
     if all_files:
         selected.append(all_files[0])
     recent_files = all_files[-(limit - 1):] if limit > 1 else []
-    for p in recent_files:
-        if p not in selected:
-            selected.append(p)
+    for snapshot in recent_files:
+        if snapshot not in selected:
+            selected.append(snapshot)
         if len(selected) >= limit:
             break
 
     unique_files = selected
     out = []
-    for index, p in enumerate(unique_files):
-        st = p.stat()
+    for index, snapshot in enumerate(unique_files):
+        path = snapshot.path
         try:
-            url_path = str(p.relative_to(REPO))
+            url_path = str(path.relative_to(REPO))
         except ValueError:
-            url_path = str(p.resolve())
-        epoch_match = re.search(r"_e(?P<epoch>\d{6})_", p.name)
+            url_path = str(path.resolve())
+        epoch_match = re.search(r"_e(?P<epoch>\d{6})_", path.name)
         epoch = int(epoch_match.group("epoch")) if epoch_match else None
         role = ""
         if index == 0 and len(unique_files) > 1:
@@ -348,10 +378,10 @@ def newest_preview_images(
         elif index == len(unique_files) - 1:
             role = "最新图"
         out.append({
-            "name": p.name,
-            "path": str(p),
-            "size": human_size(st.st_size),
-            "mtime": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "name": path.name,
+            "path": str(path),
+            "size": human_size(snapshot.size),
+            "mtime": datetime.fromtimestamp(snapshot.mtime).strftime("%Y-%m-%d %H:%M:%S"),
             "url": f"/preview-image?path={quote(url_path)}",
             "role": role,
             "epoch": epoch,
@@ -374,30 +404,29 @@ def tensorboard_loss_scalars(limit: int = TENSORBOARD_LOSS_LIMIT) -> list[dict]:
     if not LOG_DIR.exists():
         return []
 
-    event_files = [p for p in LOG_DIR.rglob("events.out.tfevents.*") if p.is_file()]
-    if not event_files:
+    event_snapshots = [
+        snapshot
+        for snapshot in _snapshots_under(LOG_DIR)
+        if snapshot.path.name.startswith("events.out.tfevents.")
+    ]
+    if not event_snapshots:
         return []
 
-    def _stat_entry(path: Path) -> tuple[str, int, int]:
-        st = path.stat()
-        return (str(path), st.st_mtime_ns, st.st_size)
-
-    try:
-        cache_key = tuple(_stat_entry(p) for p in sorted(event_files))
-    except OSError:
-        cache_key = None
-    if cache_key is not None and cache_key == _TB_SCALAR_CACHE["key"]:
+    event_snapshots.sort(key=lambda snapshot: str(snapshot.path))
+    cache_key = tuple(
+        (str(snapshot.path), snapshot.mtime_ns, snapshot.size)
+        for snapshot in event_snapshots
+    )
+    if cache_key == _TB_SCALAR_CACHE["key"]:
         return _TB_SCALAR_CACHE["series"]
 
     run_dirs: dict[Path, float] = {}
-    for event_file in event_files:
-        try:
-            run_dirs[event_file.parent] = max(
-                run_dirs.get(event_file.parent, 0.0),
-                event_file.stat().st_mtime,
-            )
-        except OSError:
-            continue
+    for snapshot in event_snapshots:
+        run_dir = snapshot.path.parent
+        run_dirs[run_dir] = max(
+            run_dirs.get(run_dir, 0.0),
+            snapshot.mtime,
+        )
 
     for run_dir, _ in sorted(run_dirs.items(), key=lambda item: item[1], reverse=True):
         try:
@@ -474,7 +503,8 @@ _TOML_NUM_KEYS = ("max_train_epochs", "max_train_steps", "learning_rate", "unet_
                    "text_encoder_lr", "network_dim", "network_alpha", "train_batch_size",
                    "gradient_accumulation_steps", "save_every_n_epochs", "save_every_n_steps",
                    "noise_offset", "clip_skip", "seed", "lr_warmup_steps")
-_TOML_BOOL_KEYS = ("gradient_checkpointing", "full_bf16", "full_fp16")
+_TOML_BOOL_KEYS = ("gradient_checkpointing", "full_bf16", "full_fp16",
+                   "network_train_unet_only")
 
 
 def latest_training_config() -> dict:
@@ -518,17 +548,18 @@ def _positive_int(value: object, default: int = 1) -> int:
 
 
 def _runtime_total_steps(runtime_metrics: dict | None) -> int:
+    """Trainer-reported total (tqdm stdout or progress JSONL) — the ground truth.
+
+    The directory estimate cannot see aspect-ratio bucketing (each resolution
+    bucket batches separately), so it undercounts; prefer the runtime value.
+    """
     if not runtime_metrics:
         return 0
     try:
         total_steps = int(float(str(runtime_metrics.get("total_steps", ""))))
     except (TypeError, ValueError):
         return 0
-    if total_steps <= 0:
-        return 0
-    if runtime_metrics.get("progress_source") == "anima_progress_jsonl":
-        return total_steps
-    return 0
+    return total_steps if total_steps > 0 else 0
 
 
 def infer_training_engine(config: dict, active_task: dict | None = None) -> str:
@@ -578,14 +609,14 @@ def _scan_repeat_subsets(base_dir: str, *, require_repeat_prefix: bool) -> dict:
 
 
 def estimate_training_steps(config: dict, engine: str = "kohya", runtime_metrics: dict | None = None) -> dict:
-    runtime_total = _runtime_total_steps(runtime_metrics) if engine == "anima-fast" else 0
+    runtime_total = _runtime_total_steps(runtime_metrics)
     train_data_dir = config.get("train_data_dir") or config.get("source_image_dir") or ""
     estimate: dict = {
         "engine": engine,
         "total_steps": runtime_total,
         "steps_per_epoch": 0,
         "samples_per_epoch": 0,
-        "detail": "Fast runtime progress" if runtime_total else "",
+        "detail": "trainer runtime progress" if runtime_total else "",
         "runtime_total": bool(runtime_total),
     }
     if not train_data_dir:
@@ -672,7 +703,7 @@ def _extract_train_params(config: dict, engine: str | None = None, runtime_metri
     step_estimate = estimate_training_steps(config, engine=engine, runtime_metrics=runtime_metrics)
     step_label = "总步数"
     if step_estimate.get("runtime_total") and step_estimate.get("total_steps"):
-        params.append({"label": step_label, "value": f"{step_estimate['total_steps']}（Fast 真实进度）"})
+        params.append({"label": step_label, "value": f"{step_estimate['total_steps']}（训练器实时）"})
     elif step_estimate.get("total_steps") and step_estimate.get("epochs"):
         params.append({
             "label": step_label,
@@ -686,9 +717,16 @@ def _extract_train_params(config: dict, engine: str | None = None, runtime_metri
             "value": f"{step_estimate['steps_per_epoch']} 步（{step_estimate.get('detail', '')}）",
         })
 
-    _add("学习率", "learning_rate", "lr")
-    _add("UNet LR", "unet_lr", "lr")
-    _add("TE LR", "text_encoder_lr", "lr")
+    if config.get("network_train_unet_only") == "true":
+        # only-DiT training: the DiT lr is the effective one; global/TE lr are inert
+        if config.get("unet_lr") not in (None, ""):
+            _add("学习率 (DiT)", "unet_lr", "lr")
+        else:
+            _add("学习率 (DiT)", "learning_rate", "lr")
+    else:
+        _add("学习率", "learning_rate", "lr")
+        _add("UNet LR", "unet_lr", "lr")
+        _add("TE LR", "text_encoder_lr", "lr")
     _add("优化器", "optimizer_type")
     _add("调度器", "lr_scheduler")
     _add("Rank (dim)", "network_dim")

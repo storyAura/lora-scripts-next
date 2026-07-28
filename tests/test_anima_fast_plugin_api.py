@@ -164,6 +164,20 @@ class AnimaFastPluginApiTests(unittest.TestCase):
         self.assertEqual(response.status, "fail")
         self.assertIn("not ready", response.message)
 
+    def test_run_rejects_sageattention_before_extension_readiness(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload = {
+                "model_train_type": "anima-lora-fast",
+                "attn_mode": "sageattn",
+            }
+            with mock.patch("mikazuki.app.api.Path.cwd", return_value=root):
+                response = asyncio.run(api.create_toml_file(make_request(payload)))
+
+        self.assertEqual(response.status, "fail")
+        self.assertEqual(response.data["field"], "attn_mode")
+        self.assertIn("does not support training backward", response.message)
+
     def test_run_rejects_anima_fast_when_audit_drifts(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

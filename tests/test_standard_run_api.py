@@ -3,29 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
-import sys
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from starlette.requests import Request
-
-stub_interrogator = types.ModuleType("mikazuki.tagger.interrogator")
-stub_interrogator.available_interrogators = {}
-stub_jobs = types.ModuleType("mikazuki.tagger.jobs")
-stub_jobs.run_interrogate_job = lambda *args, **kwargs: None
-stub_jobs.run_prefetch_job = lambda *args, **kwargs: None
-stub_progress = types.ModuleType("mikazuki.tagger.progress")
-stub_progress.tagger_progress = types.SimpleNamespace(
-    get=lambda: {},
-    request_cancel=lambda: False,
-    is_busy=lambda: False,
-    reset_idle=lambda message=None: None,
-)
-sys.modules["mikazuki.tagger.interrogator"] = stub_interrogator
-sys.modules["mikazuki.tagger.jobs"] = stub_jobs
-sys.modules["mikazuki.tagger.progress"] = stub_progress
 
 from mikazuki.app import api
 
@@ -40,6 +23,61 @@ def make_request(payload: dict) -> Request:
 
 
 class StandardRunApiTests(unittest.TestCase):
+    def test_anima_run_rejects_sageattention_before_path_validation(self):
+        response = asyncio.run(api.create_toml_file(make_request({
+            "model_train_type": "anima-lora",
+            "attn_mode": "sageattn",
+        })))
+
+        self.assertEqual(response.status, "fail")
+        self.assertEqual(response.data["field"], "attn_mode")
+        self.assertIn("does not support training backward", response.message)
+
+    def test_anima_run_accepts_vera_and_continues_to_path_validation(self):
+        response = asyncio.run(api.create_toml_file(make_request({
+            "model_train_type": "anima-lora",
+            "lora_type": "vera",
+        })))
+
+        self.assertEqual(response.status, "fail")
+        self.assertEqual(response.data["field"], "train_data_dir")
+
+    def test_anima_run_accepts_pissa_and_continues_to_path_validation(self):
+        response = asyncio.run(api.create_toml_file(make_request({
+            "model_train_type": "anima-lora",
+            "lora_type": "lora",
+            "pissa_init": True,
+        })))
+
+        self.assertEqual(response.status, "fail")
+        self.assertEqual(response.data["field"], "train_data_dir")
+
+    def test_run_rejects_lora_plus_with_prodigy_before_path_validation(self):
+        response = asyncio.run(api.create_toml_file(make_request({
+            "model_train_type": "anima-lora",
+            "lora_type": "lora_plus",
+            "optimizer_type": "Prodigy",
+        })))
+
+        self.assertEqual(response.status, "fail")
+        self.assertEqual(response.data["field"], "optimizer_type")
+        self.assertIn("LoRA+", response.message)
+
+    def test_run_converts_unusable_requested_attention_to_structured_failure(self):
+        probe = types.SimpleNamespace(usable=False, reason="backward probe failed")
+        with mock.patch.object(api, "probe_training_attention_backend", return_value=probe):
+            response = asyncio.run(api.create_toml_file(make_request({
+                "model_train_type": "anima-lora",
+                "attn_mode": "xformers",
+                "train_data_dir": "E:/OpenSourceTeamWork/not-used",
+                "pretrained_model_name_or_path": "not-used-model.safetensors",
+            })))
+
+        self.assertEqual(response.status, "fail")
+        self.assertEqual(response.data["field"], "attn_mode")
+        self.assertEqual(response.data["value"], "xformers")
+        self.assertIn("probe failed", response.message)
+
     def test_run_rejects_unknown_standard_train_type_without_500(self):
         response = asyncio.run(api.create_toml_file(make_request({"model_train_type": "unknown-lora"})))
 

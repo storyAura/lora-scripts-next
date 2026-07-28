@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import LycorisBaseModule
+from .functional import compute_merged_delta
 from ..functional import factorization, rebuild_tucker
 from ..functional.lokr import make_kron
 from ..logging import logger
@@ -373,7 +374,9 @@ class LokrModule(LycorisBaseModule):
         if shape is not None:
             weight = weight.view(shape)
         if self.training and self.rank_dropout:
-            drop = (torch.rand(weight.size(0)) > self.rank_dropout).to(dtype)
+            drop = (
+                torch.rand(weight.size(0), device=weight.device) > self.rank_dropout
+            ).to(dtype)
             drop = drop.view(-1, *[1] * len(weight.shape[1:]))
             if self.rank_dropout_scale:
                 drop /= drop.mean()
@@ -550,18 +553,18 @@ class LokrModule(LycorisBaseModule):
 
         base = self.org_forward(x, *args, **kwargs)
         base_weight = self._current_weight().to(x.device)
-        diff_weight = self.get_weight(self.shape).to(base_weight.dtype) * self.scalar
-
-        if self.wd:
-            new_weight = self.apply_weight_decompose(
-                base_weight + diff_weight, self.multiplier
-            )
-        elif self.multiplier == 1:
-            new_weight = base_weight + diff_weight
-        else:
-            new_weight = base_weight + diff_weight * self.multiplier
-
-        delta_weight = new_weight - base_weight
+        diff_weight = self.get_weight(self.shape) * self.scalar
+        transform = (
+            (lambda weight: self.apply_weight_decompose(weight, self.multiplier))
+            if self.wd
+            else None
+        )
+        delta_weight = compute_merged_delta(
+            base_weight,
+            diff_weight,
+            self.multiplier,
+            transform,
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta
 

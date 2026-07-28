@@ -75,6 +75,18 @@ class HuberScheduleGuardTests(unittest.TestCase):
             cpu_offload_checkpointing=False, unsloth_offload_checkpointing=False,
             gradient_checkpointing=True, loss_type="l2", huber_schedule="snr",
             timestep_sampling="shift", discrete_flow_shift=3.0,
+            # fields consumed by the expanded assert_extra_args; parser defaults,
+            # except network_module (parser default None, set to a realistic module)
+            network_module="networks.lora_anima",
+            network_train_text_encoder_only=False,
+            scale_weight_norms=None,
+            base_model_quantization="none",
+            base_model_quantization_compute_dtype="bf16",
+            base_model_quantization_skip_modules=None,
+            anima_gradient_checkpointing_mode="standard",
+            anima_compile_blocks=False,
+            anima_compile_backend="inductor",
+            torch_compile=False,
         )
         base.update(overrides)
         return SimpleNamespace(**base)

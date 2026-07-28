@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+import accelerate
 from torch.types import Number
 from library.device_utils import init_ipex, clean_memory_on_device
 
@@ -25,7 +26,14 @@ from accelerate.utils import set_seed
 from accelerate import Accelerator
 from diffusers import DDPMScheduler
 from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
-from library import deepspeed_utils, model_util, sai_model_spec, strategy_base, strategy_sd, sai_model_spec
+from library import (
+    deepspeed_utils,
+    fsdp2_frozen_base,
+    model_util,
+    sai_model_spec,
+    strategy_base,
+    strategy_sd,
+)
 
 import library.train_util as train_util
 from library.train_util import DreamBoothDataset
@@ -46,6 +54,11 @@ from library.custom_train_functions import (
     apply_masked_loss,
 )
 from library.utils import setup_logging, add_logging_arguments
+from mikazuki.attention_probe import (
+    AttentionBackendUnavailableError,
+    probe_training_attention_backend,
+)
+from mikazuki.hardware_capabilities import require_fp8_frozen_base_training
 
 setup_logging()
 import logging
@@ -348,6 +361,24 @@ class NetworkTrainer:
     def prepare_unet_with_accelerator(
         self, args: argparse.Namespace, accelerator: Accelerator, unet: torch.nn.Module
     ) -> torch.nn.Module:
+        if args.fsdp2_frozen_base:
+            sharding_report = fsdp2_frozen_base.shard_frozen_base_model_fsdp2(
+                unet,
+                accelerator.device,
+                fsdp2_frozen_base.FSDP2_TRANSFORMER_CLASS_NAMES,
+                bool(args.fsdp2_cpu_offload),
+            )
+            logger.info(
+                "Applied FSDP2 to frozen base model",
+                extra={
+                    "sharded_transformer_module_count": len(
+                        sharding_report.transformer_module_names
+                    ),
+                    "base_parameter_count": sharding_report.base_parameter_count,
+                    "cpu_offload": sharding_report.cpu_offload,
+                },
+            )
+            return unet
         return accelerator.prepare(unet)
 
     def on_step_start(self, args, accelerator, network, text_encoders, unet, batch, weight_dtype, is_train: bool = True):
@@ -586,6 +617,40 @@ class NetworkTrainer:
                 ), "when caching latents, either color_aug or random_crop cannot be used / latentをキャッシュするときはcolor_augとrandom_cropは使えません"
 
         self.assert_extra_args(args, train_dataset_group, val_dataset_group)  # may change some args
+        if args.fp8_base or args.fp8_base_unet:
+            require_fp8_frozen_base_training()
+        requested_attention = str(getattr(args, "attn_mode", "") or "").strip().lower()
+        if requested_attention in {"flash", "xformers"}:
+            attention_result = probe_training_attention_backend(requested_attention)
+            if not attention_result.usable:
+                raise AttentionBackendUnavailableError(
+                    f"attn_mode={requested_attention!r} was explicitly requested but "
+                    f"its training probe failed: {attention_result.reason}"
+                )
+        try:
+            launch_world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        except ValueError as error:
+            raise fsdp2_frozen_base.FSDP2FrozenBaseError(
+                f"WORLD_SIZE must be an integer, got {os.environ.get('WORLD_SIZE')!r}"
+            ) from error
+        fsdp2_frozen_base.validate_fsdp2_frozen_base_request(
+            bool(args.fsdp2_frozen_base),
+            sys.platform,
+            torch.cuda.is_available(),
+            launch_world_size,
+            torch.cuda.device_count(),
+            accelerate.__version__,
+            torch.__version__,
+            bool(args.deepspeed),
+            bool(args.torch_compile),
+            args.blocks_to_swap,
+            args.base_model_quantization,
+            bool(getattr(args, "anima_compile_blocks", False)),
+            self.is_train_text_encoder(args),
+            bool(args.network_train_unet_only),
+            bool(args.network_train_text_encoder_only),
+            args.network_module,
+        )
 
         # acceleratorを準備する
         logger.info("preparing accelerator")
@@ -1060,6 +1125,15 @@ class NetworkTrainer:
             "ss_huber_c": args.huber_c,
             "ss_fp8_base": bool(args.fp8_base),
             "ss_fp8_base_unet": bool(args.fp8_base_unet),
+            "ss_base_model_quantization": args.base_model_quantization,
+            "ss_base_model_quantization_compute_dtype": args.base_model_quantization_compute_dtype,
+            "ss_base_model_quantization_skip_modules": json.dumps(
+                args.base_model_quantization_skip_modules or [],
+                ensure_ascii=False,
+            ),
+            "ss_quantize_text_encoder": bool(args.quantize_text_encoder),
+            "ss_fsdp2_frozen_base": bool(args.fsdp2_frozen_base),
+            "ss_fsdp2_cpu_offload": bool(args.fsdp2_cpu_offload),
             "ss_validation_seed": args.validation_seed,
             "ss_validation_split": args.validation_split,
             "ss_max_validation_steps": args.max_validation_steps,
@@ -1779,6 +1853,42 @@ def setup_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use fp8 for U-Net (or DiT), Text Encoder is fp16 or bf16"
         " / U-Net（またはDiT）にfp8を使用する。Text Encoderはfp16またはbf16",
+    )
+    parser.add_argument(
+        "--base_model_quantization",
+        type=str,
+        default="none",
+        choices=["none", "int8", "nf4"],
+        help="quantize frozen DiT/U-Net Linear weights with bitsandbytes; only adapter parameters remain trainable",
+    )
+    parser.add_argument(
+        "--base_model_quantization_compute_dtype",
+        type=str,
+        default="bf16",
+        choices=["fp16", "bf16"],
+        help="compute dtype used by bitsandbytes frozen-base quantized Linear layers",
+    )
+    parser.add_argument(
+        "--base_model_quantization_skip_modules",
+        type=str,
+        default=None,
+        nargs="*",
+        help="additional full module-name glob patterns excluded from frozen-base quantization",
+    )
+    parser.add_argument(
+        "--quantize_text_encoder",
+        action="store_true",
+        help="also quantize frozen text-encoder Linear weights with the selected base model quantization mode",
+    )
+    parser.add_argument(
+        "--fsdp2_frozen_base",
+        action="store_true",
+        help="shard only the frozen DiT/U-Net with PyTorch FSDP2 while keeping LoRA adapters under Accelerate/DDP",
+    )
+    parser.add_argument(
+        "--fsdp2_cpu_offload",
+        action="store_true",
+        help="offload FSDP2 frozen-base shards to pinned CPU memory between uses",
     )
 
     parser.add_argument(

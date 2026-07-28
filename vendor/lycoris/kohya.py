@@ -83,8 +83,6 @@ def create_network(
         ("bora_iters", int),
         ("sora_r", int),
         ("sora_epsilon", float),
-        ("train_time_gates", str_bool),
-        ("time_gate_dim", int),
     ):
         if _key in kwargs:
             extra_algo_kwargs[_key] = _cast(kwargs[_key])
@@ -689,7 +687,7 @@ class LycorisNetworkKohya(LycorisNetwork):
     def set_current_timestep(self, timestep):
         """Broadcast the current denoising timestep to every adapter module.
 
-        Timestep-aware algos (e.g. GLoKR time gates) read ``current_timestep``
+        Timestep-aware algos (e.g. T-LoRA rank masking) read ``current_timestep``
         in their forward; other modules simply ignore the attribute.
         """
         for lora in self.unet_loras + self.text_encoder_loras:

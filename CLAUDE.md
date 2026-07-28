@@ -17,14 +17,18 @@ python gui.py                    # start everything (add --dev for dev mode)
 run_gui.bat                      # Windows launcher (auto-installs deps on first run)
 bash install.bash && bash run_gui.sh   # Linux
 
-# Tests. Most are unittest; pytest is NOT installed in the venv by default.
+# Tests: TWO gates, run both before calling a change green. pytest is installed
+# in the venv (since 2026-07-28); unittest discover silently SKIPS bare-function
+# pytest-style modules (test_china_hub, test_tagger_progress_api,
+# test_base_model_quantization, ...), so a green unittest run alone proves nothing
+# about them.
 venv\Scripts\python.exe -m unittest tests.test_anima_backend_adapter          # one module
-venv\Scripts\python.exe -m unittest tests.test_tglokr.TGLoKRTests             # one class
+venv\Scripts\python.exe -m unittest tests.test_timestep_adapters.TrainerTimestepLifecycleTests  # one class
 venv\Scripts\python.exe -m unittest discover -s tests -t tests                # whole suite
+venv\Scripts\python.exe -m pytest -q tests\                                   # incl. pytest-style
 # `discover -s tests -t .` fails — tests/ has no __init__.py, use `-t tests`.
-# 4 of ~55 modules are pytest-style (test_china_hub, test_tokenizer_cache,
-# test_portable_data_dir_links, test_portable_utils_flash_attn) and error out with
-# "No module named 'pytest'" until you `pip install pytest`.
+# Never leave sys.modules stubs installed at test-module import time — one module's
+# leftover stub breaks later modules that import the real package under pytest.
 
 python scripts/sync_vendored_lycoris.py            # install vendor/lycoris over the pip one
 python scripts/sync_vendored_lycoris.py --check    # report drift only (exit 1 if stale)
@@ -33,10 +37,17 @@ python scripts/bump_spa_asset_cache_key.py         # after editing frontend/dist
 
 ### Known-failing tests (pre-existing, not your change)
 
-`test_anima_backend_upstream` (3, expects `vendor/sd-scripts` to be a git submodule),
-`test_anima_fast_integration_static` (3, pins a stale cache key and VERSION 2.8.35 vs current).
-Full-suite baseline as of v2.9.1: **6 failures + 4 errors + 1 skipped** (the errors are the
-pytest-style modules above). Anything beyond that count is your change.
+unittest baseline as of 2026-07-28 (452 tests): **4 failures + 1 skipped** —
+`test_anima_backend_upstream` (3, expects `vendor/sd-scripts` to be a git submodule) and
+`test_anima_fast_integration_static` (1, dist still pins `sd-trainer-brand.js?v=2.8.35`;
+cosmetic — that file is served no-cache).
+pytest baseline (`-m pytest -q tests\`, ~660 passed): the same 4 plus pytest-only
+pre-existing reds — `test_china_hub` (2: one asserts modelscope-missing behavior, one
+downloads from ModelScope), `test_cli_entrypoints` (1, README does not document
+`train_anima_by_toml.sh`), `test_dataset_editor_api` (1, dist tageditor shell lacks the
+经典标签编辑 embed) → **8 failures + 1 skipped**. `test_portable_updater_paths` hits the
+live GitHub release API and flips with network health — rerun it in isolation before
+blaming a change. Anything beyond these counts is your change.
 
 ## Architecture
 
@@ -64,7 +75,8 @@ mikazuki/schema/*.ts          Schema DSL (schemastery), evaluated in the BROWSER
   → GET /api/schemas/all      api.py load_schemas(); /api/schemas/hashes drives hot reload
   → frontend builds the form, parseParams() flattens it
   → POST /api/run             api.py create_toml_file()
-      fix_config_types → normalize_custom_args → validation → apply_*_defaults
+      fix_config_types → normalize_custom_args → normalize_optimizer_configuration
+      → validate_training_configuration → apply_anima_training_defaults (attn probe)
       → config/autosave/<timestamp>.toml
   → process.py run_train() → build_accelerate_train_command()
       python mikazuki/accelerate_launch.py ... <trainer_file> --config_file <toml>
@@ -79,7 +91,26 @@ out of the written TOML to feed accelerate, keeping launcher and trainer consist
 Adding a UI parameter means touching both `mikazuki/schema/*.ts` (the form) **and** the backend
 mapping — for LyCORIS algos that is `LYCORIS_NETWORK_ARG_MAP` in
 `mikazuki/anima_backend/adapter.py`, whose reverse table lives in
-`mikazuki/utils/config_import.py` (keep them symmetric; `tests/test_tglokr.py` asserts this).
+`mikazuki/utils/config_import.py` (keep them symmetric; `tests/test_timestep_adapters.py` asserts this).
+
+### Pre-launch guards (run before any file/process work; audit 2026-07-28)
+
+- `mikazuki/training_validation.py` — pure-Mapping validator (no torch import), called from
+  both `create_toml_file()` and `adapt_anima_config()`. Removed algorithms go into
+  `UNIMPLEMENTED_ANIMA_ADAPTER_TYPES` so a stale saved config fails loudly instead of silently
+  training something else (precedent: tglokr, removed 2026-07-28).
+- `mikazuki/attention_probe.py` — real forward/backward probes, cached per environment
+  fingerprint. Auto-detect picks the first backend that passes; an explicitly requested
+  xformers/flash whose probe fails raises `AttentionBackendUnavailableError`, which
+  `_apply_anima_training_defaults_or_fail` converts to a structured `APIResponseFail` — every
+  `apply_anima_training_defaults` call site in request handlers must go through that wrapper.
+- `mikazuki/optimizer_configuration.py` — optimizer alias normalization (short names →
+  full bitsandbytes class paths, structured AdEMAMix fields); runs before validation.
+- Frozen-base quantization is a **two-layer white-list changed together**:
+  lora_type {lora, lora_plus, lora_fa, vera} in `training_validation.py` ↔ the matching
+  native modules in `SUPPORTED_QUANTIZED_NETWORK_MODULES`
+  (`vendor/sd-scripts/library/base_model_quantization.py`). rsLoRA runs on lycoris.kohya and
+  is rejected by design.
 
 ### Editing schemas: three caches stand between you and the UI
 
@@ -105,9 +136,13 @@ right values on restore, `_apply_lora_type_overrides()` in the adapter forces th
 time regardless of what the form carried. Changing a branch's module/algo means updating that
 map in the same commit.
 
-Two rendering rules: a union only gets a dropdown when it has **more than one** visible choice
-(a single-option union renders no control at all), and a safe union that may legitimately not
-match needs a trailing `Schema.object({})` fallback branch (see the optimizer unions).
+Three rendering rules: a union only gets a dropdown when it has **more than one** visible choice
+(a single-option union renders no control at all); a safe union that may legitimately not
+match needs a trailing `Schema.object({})` fallback branch (see the optimizer unions); and
+number fields validate "(value − min) is an exact multiple of step" browser-side — a `min` off
+the step grid makes the field's own default invalid and the whole branch silently vanishes
+(`tests/test_schema_field_constraints.py` sweeps every schema for this and for required-const
+branch markers).
 
 ### Saving / loading params ("保存参数 / 读取参数") and config import
 
@@ -150,7 +185,7 @@ page *is* the Anima page (historical naming, see `frontend/VENDOR.md`).
 | Path | What | Editable? |
 |---|---|---|
 | `vendor/sd-scripts/` | Modified kohya sd-scripts — the real Anima trainers | yes, this is where trainer fixes go |
-| `vendor/lycoris/` | Modified LyCORIS (local algos: glokr / tglokr / bokr / bora / gsokr / glora_boft) | yes — then run the sync script |
+| `vendor/lycoris/` | Modified LyCORIS (local algos: glokr / bokr / bora / gsokr / glora_boft) | yes — then run the sync script |
 | `scripts/stable/`, `scripts/dev/` | Vendored kohya stable/dev branches | no, except the two `anima_train*.py` wrappers |
 | `frontend/dist/` | Pre-compiled frontend, built elsewhere | patch the built artifacts directly |
 
@@ -218,7 +253,7 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 - Blocks run the AdaLN modulation inside `torch.autocast(..., enabled=use_fp32)`, which
   **disables** autocast on the bf16 path — tensors reaching it must already match the weight
   dtype. Changing timestep dtypes upstream has bitten this before.
-- GLoKR/T-GLoKR default to merged mode, which reconstructs the full ΔW per module per step —
+- GLoKR defaults to merged mode, which reconstructs the full ΔW per module per step —
   heavy on VRAM. `bypass_mode=True` avoids it but is mutually exclusive with
   `use_bora`/`dora_wd`. `vendor/lycoris/GLOKR.md` has the full parameter reference.
 - For LoKr-family algos `network_dim` is only a threshold ("stop decomposing the Kronecker
@@ -231,7 +266,7 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
   (`--w --h --s --l --d --ss --sch --fs`) baked by `get_sample_prompts()`, never as TOML keys
   (the adapter drops all `sample_*` UI fields). `--fs <flow_shift>` (default 3.0) is parsed by
   the trainer but not exposed in the UI.
-- Timestep-aware adapters (T-LoRA rank masking, T-GLoKR time gates) read
+- Timestep-aware adapters (T-LoRA rank masking) read
   `network.set_current_timestep()`. The train loop injects per-batch timesteps in [0, 1000]
   and must **not** clear them before backward (gradient checkpointing re-runs the forward);
   preview sampling injects the per-step sigma in [0, 1] via `do_sample(timestep_callback=...)`.

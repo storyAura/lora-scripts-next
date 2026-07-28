@@ -13,6 +13,7 @@ init_ipex()
 
 import train_network
 from library import (
+    base_model_quantization,
     flux_models,
     flux_train_utils,
     flux_utils,
@@ -55,6 +56,19 @@ class FluxNetworkTrainer(train_network.NetworkTrainer):
 
         if args.fp8_base_unet:
             args.fp8_base = True  # if fp8_base_unet is enabled, fp8_base is also enabled for FLUX.1
+
+        base_model_quantization.validate_base_model_quantization_training_request(
+            args.base_model_quantization,
+            args.base_model_quantization_compute_dtype,
+            "flux",
+            args.network_module,
+            bool(args.fp8_base),
+            bool(args.fp8_base_unet),
+            args.blocks_to_swap,
+        )
+        base_model_quantization.normalize_skip_module_patterns(
+            args.base_model_quantization_skip_modules
+        )
 
         if args.cache_text_encoder_outputs_to_disk and not args.cache_text_encoder_outputs:
             logger.warning(
@@ -122,6 +136,27 @@ class FluxNetworkTrainer(train_network.NetworkTrainer):
                     " / FLUXモデルをfp8に変換しています。これには時間がかかる場合があります。fp8チェックポイントを使用することで時間を短縮できます。"
                 )
                 model.to(torch.float8_e4m3fn)
+        if args.base_model_quantization != "none":
+            model.requires_grad_(False)
+            quantization_report = base_model_quantization.quantize_model_for_lora(
+                model,
+                "flux",
+                args.base_model_quantization,
+                args.base_model_quantization_compute_dtype,
+                base_model_quantization.normalize_skip_module_patterns(
+                    args.base_model_quantization_skip_modules
+                ),
+            )
+            logger.info(
+                "Quantized frozen Flux DiT",
+                extra={
+                    "quantization_mode": quantization_report.mode,
+                    "converted_module_count": len(quantization_report.converted_modules),
+                    "skipped_module_count": len(quantization_report.skipped_modules),
+                    "original_weight_bytes": quantization_report.original_weight_bytes,
+                    "estimated_quantized_weight_bytes": quantization_report.estimated_quantized_weight_bytes,
+                },
+            )
 
         # if args.split_mode:
         #     model = self.prepare_split_model(model, weight_dtype, accelerator)
@@ -153,6 +188,30 @@ class FluxNetworkTrainer(train_network.NetworkTrainer):
                 raise ValueError(f"Unsupported fp8 model dtype: {t5xxl.dtype}")
             elif t5xxl.dtype == torch.float8_e4m3fn:
                 logger.info("Loaded fp8 T5XXL model")
+        if args.base_model_quantization != "none" and args.quantize_text_encoder:
+            text_encoders_to_quantize = [t5xxl]
+            if self.use_clip_l:
+                text_encoders_to_quantize.insert(0, clip_l)
+            skip_patterns = base_model_quantization.normalize_skip_module_patterns(
+                args.base_model_quantization_skip_modules
+            )
+            for text_encoder_index, text_encoder in enumerate(text_encoders_to_quantize):
+                text_encoder.requires_grad_(False)
+                text_encoder_report = base_model_quantization.quantize_text_encoder_for_lora(
+                    text_encoder,
+                    args.base_model_quantization,
+                    args.base_model_quantization_compute_dtype,
+                    skip_patterns,
+                )
+                logger.info(
+                    "Quantized frozen Flux text encoder",
+                    extra={
+                        "text_encoder_index": text_encoder_index,
+                        "quantization_mode": text_encoder_report.mode,
+                        "converted_module_count": len(text_encoder_report.converted_modules),
+                        "skipped_module_count": len(text_encoder_report.skipped_modules),
+                    },
+                )
 
         ae = flux_utils.load_ae(args.ae, weight_dtype, "cpu", disable_mmap=args.disable_mmap_load_safetensors)
 

@@ -1,6 +1,3 @@
-import sys
-import types
-
 import pytest
 
 from mikazuki.app.api import _detect_best_attn_mode
@@ -8,19 +5,17 @@ from mikazuki.portable_utils import train_env_overrides
 
 
 def test_detect_best_attn_mode_prefers_flash_when_stack_usable(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("mikazuki.app.api.flash_attn_stack_usable", lambda: True)
+    monkeypatch.setattr("mikazuki.app.api.detect_best_training_attention", lambda: "flash")
     assert _detect_best_attn_mode() == "flash"
 
 
 def test_detect_best_attn_mode_uses_xformers_without_flash(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("mikazuki.app.api.flash_attn_stack_usable", lambda: False)
-    monkeypatch.setitem(sys.modules, "xformers", types.ModuleType("xformers"))
+    monkeypatch.setattr("mikazuki.app.api.detect_best_training_attention", lambda: "xformers")
     assert _detect_best_attn_mode() == "xformers"
 
 
 def test_detect_best_attn_mode_uses_torch_without_flash_or_xformers(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("mikazuki.app.api.flash_attn_stack_usable", lambda: False)
-    monkeypatch.delitem(sys.modules, "xformers", raising=False)
+    monkeypatch.setattr("mikazuki.app.api.detect_best_training_attention", lambda: "torch")
     assert _detect_best_attn_mode() == "torch"
 
 

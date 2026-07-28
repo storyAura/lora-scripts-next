@@ -4,20 +4,49 @@
 mem_efficient forces SDPBackend.EFFICIENT_ATTENTION inside a local context:
 no silent fallback to flash/math kernels, fail-fast on unsupported setups.
 """
+import argparse
+import io
 import sys
 import unittest
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "vendor" / "sd-scripts"))
 
 import torch
 
+from library import anima_train_utils
 from library.attention import AttentionParams, _sdpa_backend_context, attention
 
 
 class MemEfficientBackendTests(unittest.TestCase):
+    def test_cli_rejects_sageattention_for_training(self):
+        parser = argparse.ArgumentParser()
+        anima_train_utils.add_anima_training_arguments(parser)
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            parser.parse_args(["--attn_mode", "sageattn"])
+
+        self.assertIn("invalid choice", stderr.getvalue())
+
+    def test_dispatcher_rejects_sageattention_before_kernel_call(self):
+        called = False
+
+        def inference_only_kernel(q, k, v):
+            nonlocal called
+            called = True
+            return q
+
+        q = torch.randn(1, 4, 1, 4, requires_grad=True)
+        with mock.patch("library.attention.sageattn", inference_only_kernel):
+            with self.assertRaisesRegex(RuntimeError, "does not support training backward"):
+                attention(q, q, q, AttentionParams("sageattn", False))
+
+        self.assertFalse(called)
+
     def test_context_is_null_for_other_modes(self):
         for mode in (None, "torch", "xformers", "flash", "sageattn"):
             self.assertIsInstance(_sdpa_backend_context(mode), nullcontext)

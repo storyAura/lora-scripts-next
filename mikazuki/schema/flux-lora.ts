@@ -90,6 +90,10 @@ Schema.intersect([
         UpdateSchema(SHARED_SCHEMAS.RAW.PRECISION_CACHE_BATCH, {
             fp8_base: Schema.boolean().default(true).description("对基础模型使用 FP8 精度"),
             fp8_base_unet: Schema.boolean().description("仅对 U-Net 使用 FP8 精度（CLIP-L不使用）"),
+            base_model_quantization: Schema.union(["none", "int8", "nf4"]).default("none").description("冻结基座量化。启用前必须关闭 fp8_base / fp8_base_unet，并使用 networks.lora_flux；INT8 兼顾速度，NF4 最省显存"),
+            base_model_quantization_compute_dtype: Schema.union(["bf16", "fp16"]).default("bf16").description("量化 Linear 的计算精度；支持 BF16 的显卡优先选择 bf16"),
+            base_model_quantization_skip_modules: Schema.array(String).role("table").description("额外跳过量化的完整模块名 glob，一行一个，例如 double_blocks.0.*"),
+            quantize_text_encoder: Schema.boolean().default(false).description("同时量化冻结的 CLIP-L / T5XXL Linear"),
             sdpa: Schema.boolean().default(true).description("启用 sdpa"),
             cache_text_encoder_outputs: Schema.boolean().default(true).description("缓存文本编码器的输出，减少显存使用。使用时需要关闭 shuffle_caption"),
             cache_text_encoder_outputs_to_disk: Schema.boolean().default(true).description("缓存文本编码器的输出到磁盘"),

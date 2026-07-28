@@ -31,15 +31,62 @@ def _parse_bool_arg(value, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
-        return value != 0
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+        if value in (0, 1):
+            return value == 1
+        raise ValueError(
+            f"boolean value must be 0 or 1, received {value!r}"
+        )
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"invalid boolean value {value!r}")
 
 
 def _normalize_schedule(value) -> str:
     schedule = str(value or "cosine").strip().lower() or "cosine"
     if schedule not in {"linear", "cosine"}:
-        return "cosine"
+        raise ValueError(
+            "tlora_rank_schedule must be 'linear' or 'cosine', "
+            f"received {value!r}"
+        )
     return schedule
+
+
+def _parse_positive_int_arg(value, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(
+            f"{field_name} must be a positive integer, received {value!r}"
+        )
+    try:
+        parsed = int(value)
+        numeric = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            f"{field_name} must be a positive integer, received {value!r}"
+        ) from error
+    if not math.isfinite(numeric) or numeric != parsed or parsed <= 0:
+        raise ValueError(
+            f"{field_name} must be a positive integer, received {value!r}"
+        )
+    return parsed
+
+
+def _parse_probability_arg(value, field_name: str):
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            f"{field_name} must be in [0, 1), received {value!r}"
+        ) from error
+    if not math.isfinite(parsed) or not 0 <= parsed < 1:
+        raise ValueError(
+            f"{field_name} must be in [0, 1), received {value!r}"
+        )
+    return parsed
 
 
 def _broadcast_rank_mask(values: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
@@ -61,12 +108,6 @@ def _broadcast_rank_mask(values: torch.Tensor, reference: torch.Tensor) -> torch
         return values.reshape(view_shape)
 
     # Fallback for uncommon layouts.
-    while values.ndim < reference.ndim:
-        values = values.unsqueeze(-1)
-    return values
-
-
-def _broadcast_per_sample_scale(values: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
     while values.ndim < reference.ndim:
         values = values.unsqueeze(-1)
     return values
@@ -98,9 +139,44 @@ class TLoRAModule(lora_network.LoRAModule):
             module_dropout=module_dropout,
         )
         self._tlora_network_ref = None
-        self.tlora_min_rank = max(1, min(self.lora_dim, int(tlora_min_rank if tlora_min_rank is not None else 1)))
+        self.tlora_min_rank = _parse_positive_int_arg(
+            tlora_min_rank if tlora_min_rank is not None else 1,
+            "tlora_min_rank",
+        )
+        if not 1 <= self.tlora_min_rank <= self.lora_dim:
+            raise ValueError(
+                "tlora_min_rank must be between 1 and network_dim "
+                f"({self.lora_dim}), received {self.tlora_min_rank}"
+            )
         self.tlora_rank_schedule = _normalize_schedule(tlora_rank_schedule)
         self.tlora_orthogonal_init = _parse_bool_arg(tlora_orthogonal_init, default=False)
+        self.dropout = _parse_probability_arg(
+            self.dropout,
+            "network_dropout",
+        )
+        self.rank_dropout = _parse_probability_arg(
+            self.rank_dropout,
+            "rank_dropout",
+        )
+        self.module_dropout = _parse_probability_arg(
+            self.module_dropout,
+            "module_dropout",
+        )
+        self.register_buffer(
+            "tlora_min_rank_state",
+            torch.tensor(self.tlora_min_rank, dtype=torch.int64),
+            persistent=True,
+        )
+        self.register_buffer(
+            "tlora_rank_schedule_state",
+            torch.tensor(
+                0 if self.tlora_rank_schedule == "linear" else 1,
+                dtype=torch.int64,
+            ),
+            persistent=True,
+        )
+        self.org_module_ref = [org_module]
+        self.enabled = True
 
         if self.tlora_orthogonal_init:
             torch.nn.init.orthogonal_(self.lora_down.weight)
@@ -116,18 +192,33 @@ class TLoRAModule(lora_network.LoRAModule):
     def _get_current_timesteps(self):
         network = self._get_network()
         if network is None:
-            return None
+            raise RuntimeError(
+                f"T-LoRA module {self.lora_name} is not bound to its network"
+            )
         if not self.lora_name.startswith(lora_network.LoRANetwork.LORA_PREFIX_UNET):
             return None
 
         timesteps = getattr(network, "current_timestep", None)
-        if timesteps is None or not torch.is_tensor(timesteps) or timesteps.numel() == 0:
-            return None
-        return timesteps
+        if timesteps is None:
+            raise RuntimeError(
+                "T-LoRA current timestep is missing; call "
+                "set_current_timestep() before every model forward"
+            )
+        tensor = (
+            timesteps
+            if torch.is_tensor(timesteps)
+            else torch.as_tensor(timesteps)
+        )
+        if tensor.numel() == 0:
+            raise RuntimeError(
+                "T-LoRA current timestep is empty; call "
+                "set_current_timestep() with at least one value"
+            )
+        return tensor
 
     def _get_tlora_rank_mask_and_scale(self, lx):
         timesteps = self._get_current_timesteps()
-        if timesteps is None or self.lora_dim <= self.tlora_min_rank:
+        if timesteps is None:
             return None, None
 
         batch_size = lx.size(0)
@@ -135,36 +226,53 @@ class TLoRAModule(lora_network.LoRAModule):
         if timesteps.numel() == 1:
             timesteps = timesteps.expand(batch_size)
         elif timesteps.numel() != batch_size:
-            return None, None
+            raise ValueError(
+                "T-LoRA timestep batch size mismatch: "
+                f"received {timesteps.numel()} values for batch size {batch_size}"
+            )
 
-        if timesteps.max().item() > 1.0 or timesteps.min().item() < 0.0:
+        if not torch.isfinite(timesteps).all():
+            raise ValueError(
+                "T-LoRA timestep values must all be finite"
+            )
+        minimum = float(timesteps.min().item())
+        maximum = float(timesteps.max().item())
+        if minimum < 0.0 or maximum > 1000.0:
+            raise ValueError(
+                "T-LoRA timestep values must be within [0, 1] or "
+                f"[0, 1000], received min={minimum}, max={maximum}"
+            )
+        if maximum > 1.0:
             timesteps = timesteps / 1000.0
-        timesteps = timesteps.clamp(0.0, 1.0)
 
         progress = 1.0 - timesteps
         if self.tlora_rank_schedule == "cosine":
             progress = 0.5 - 0.5 * torch.cos(progress * math.pi)
 
-        active_rank = self.tlora_min_rank + torch.round((self.lora_dim - self.tlora_min_rank) * progress).to(torch.int64)
+        active_rank = self.tlora_min_rank + torch.floor(
+            (self.lora_dim - self.tlora_min_rank) * progress
+        ).to(torch.int64)
         active_rank = active_rank.clamp(min=self.tlora_min_rank, max=self.lora_dim)
 
         rank_index = torch.arange(self.lora_dim, device=lx.device).unsqueeze(0)
         rank_mask = (rank_index < active_rank.unsqueeze(1)).to(dtype=lx.dtype)
         rank_mask = _broadcast_rank_mask(rank_mask, lx)
 
-        rank_scale = (self.lora_dim / active_rank.clamp(min=1)).to(dtype=lx.dtype)
-        rank_scale = _broadcast_per_sample_scale(rank_scale, lx)
-        return rank_mask, rank_scale
+        return rank_mask, None
 
     def forward(self, x):
         org_forwarded = self.org_forward(x)
+        if not self.enabled:
+            return org_forwarded
 
         if self.module_dropout is not None and self.training:
-            if torch.rand(1, device=x.device) < self.module_dropout:
+            if bool(
+                torch.rand((), device=x.device) < self.module_dropout
+            ):
                 return org_forwarded
 
         lx = self.lora_down(x)
-        tlora_rank_mask, tlora_rank_scale = self._get_tlora_rank_mask_and_scale(lx)
+        tlora_rank_mask, _ = self._get_tlora_rank_mask_and_scale(lx)
         if tlora_rank_mask is not None:
             lx = lx * tlora_rank_mask
 
@@ -179,14 +287,11 @@ class TLoRAModule(lora_network.LoRAModule):
         else:
             scale = self.scale
 
-        if tlora_rank_scale is not None:
-            scale = scale * tlora_rank_scale
-
         lx = self.lora_up(lx)
         return org_forwarded + lx * self.multiplier * scale
 
 
-class TLoRAInfModule(lora_network.LoRAInfModule):
+class TLoRAInfModule(TLoRAModule):
     pass
 
 
@@ -203,17 +308,25 @@ class TLoRANetwork(lora_network.LoRANetwork):
         **kwargs,
     ):
         self.current_timestep = None
-        self.tlora_min_rank = int(tlora_min_rank if tlora_min_rank is not None else 1)
+        self.tlora_min_rank = _parse_positive_int_arg(
+            tlora_min_rank if tlora_min_rank is not None else 1,
+            "tlora_min_rank",
+        )
         self.tlora_rank_schedule = _normalize_schedule(tlora_rank_schedule)
         self.tlora_orthogonal_init = _parse_bool_arg(tlora_orthogonal_init, default=False)
 
-        if module_class is None:
-            module_class = partial(
-                TLoRAModule,
-                tlora_min_rank=self.tlora_min_rank,
-                tlora_rank_schedule=self.tlora_rank_schedule,
-                tlora_orthogonal_init=self.tlora_orthogonal_init,
-            )
+        base_module_class = TLoRAModule if module_class is None else module_class
+        module_class = partial(
+            base_module_class,
+            tlora_min_rank=self.tlora_min_rank,
+            tlora_rank_schedule=self.tlora_rank_schedule,
+            tlora_orthogonal_init=self.tlora_orthogonal_init,
+        )
+        module_class.supports_conv2d = getattr(
+            base_module_class,
+            "supports_conv2d",
+            True,
+        )
 
         super().__init__(text_encoder, unet, *args, module_class=module_class, **kwargs)
 
@@ -302,9 +415,10 @@ def create_network(
     if module_dropout is not None:
         module_dropout = float(module_dropout)
 
-    tlora_min_rank = kwargs.get("tlora_min_rank", 1)
-    if tlora_min_rank is not None:
-        tlora_min_rank = int(tlora_min_rank)
+    tlora_min_rank = _parse_positive_int_arg(
+        kwargs.get("tlora_min_rank", 1),
+        "tlora_min_rank",
+    )
     tlora_rank_schedule = _normalize_schedule(kwargs.get("tlora_rank_schedule", "cosine"))
     tlora_orthogonal_init = _parse_bool_arg(kwargs.get("tlora_orthogonal_init", False), default=False)
 
@@ -376,9 +490,10 @@ def create_network_from_weights(multiplier, file, vae, text_encoder, unet, weigh
         if key not in modules_alpha:
             modules_alpha[key] = modules_dim[key]
 
-    tlora_min_rank = kwargs.get("tlora_min_rank", 1)
-    if tlora_min_rank is not None:
-        tlora_min_rank = int(tlora_min_rank)
+    tlora_min_rank = _parse_positive_int_arg(
+        kwargs.get("tlora_min_rank", 1),
+        "tlora_min_rank",
+    )
     tlora_rank_schedule = _normalize_schedule(kwargs.get("tlora_rank_schedule", "cosine"))
     tlora_orthogonal_init = _parse_bool_arg(kwargs.get("tlora_orthogonal_init", False), default=False)
 

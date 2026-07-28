@@ -17,7 +17,16 @@ SDXL_TRAIN_TYPES = frozenset({"sdxl-lora", "sdxl-finetune"})
 SD_TRAIN_TYPES = frozenset({"sd-lora", "sd-dreambooth"})
 DREAMBOOTH_TRAIN_TYPES = frozenset({"sd-dreambooth", "sdxl-finetune"})
 
-ANIMA_NETWORK_MODULES = frozenset({"networks.lora_anima", "networks.tlora_anima"})
+ANIMA_NETWORK_MODULES = frozenset({
+    "networks.lora_anima",
+    "networks.lora_fa_anima",
+    "networks.vera_anima",
+    "networks.delora_anima",
+    "networks.waveft_anima",
+    "networks.deft_anima",
+    "networks.moslora_anima",
+    "networks.tlora_anima",
+})
 
 ANIMA_CONFIG_MARKERS = frozenset({
     "qwen3",
@@ -404,19 +413,18 @@ _LYCORIS_NETWORK_ARG_TO_UI: dict[str, str] = {
     "decompose_both": "decompose_both",
     "bypass_mode": "bypass_mode",
     "dora_wd": "dora_wd",
+    "rs_lora": "rs_lora",
     "full_matrix": "full_matrix",
     "rank_dropout": "rank_dropout",
     "module_dropout": "module_dropout",
     "rank_dropout_scale": "rank_dropout_scale",
     "train_norm": "train_norm",
-    # Local extension algos (glokr / tglokr / gsokr / glora_boft) — keep in sync
+    # Local extension algos (glokr / gsokr / glora_boft) — keep in sync
     # with LYCORIS_NETWORK_ARG_MAP in mikazuki/anima_backend/adapter.py.
     "kron_rank": "kron_rank",
     "use_bora": "use_bora",
     "bora_iters": "bora_iters",
     "train_gates": "train_gates",
-    "train_time_gates": "train_time_gates",
-    "time_gate_dim": "time_gate_dim",
     "init_mode": "init_mode",
     "use_g_out": "use_g_out",
     "g_norm_mode": "g_norm_mode",
@@ -433,12 +441,12 @@ _LYCORIS_BOOL_UI_FIELDS = frozenset({
     "decompose_both",
     "bypass_mode",
     "dora_wd",
+    "rs_lora",
     "full_matrix",
     "rank_dropout_scale",
     "train_norm",
     "use_bora",
     "train_gates",
-    "train_time_gates",
     "use_g_out",
     "use_sora",
     "boft_rescaled",
@@ -465,13 +473,19 @@ _LYCORIS_ALGO_TO_LORA_TYPE = {
 # mikazuki/schema/sd3-lora.ts branch consts.
 ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
     "lora": {"network_module": "networks.lora_anima"},
-    "lora_fa": {"network_module": "networks.lora_anima"},
-    "vera": {"network_module": "networks.lora_anima"},
+    "rslora": {"network_module": "lycoris.kohya", "lycoris_algo": "lora"},
+    "lora_plus": {"network_module": "networks.lora_anima"},
+    "dora": {"network_module": "lycoris.kohya", "lycoris_algo": "lora"},
+    "lora_fa": {"network_module": "networks.lora_fa_anima"},
+    "vera": {"network_module": "networks.vera_anima"},
+    "delora": {"network_module": "networks.delora_anima"},
+    "waveft": {"network_module": "networks.waveft_anima"},
+    "deft": {"network_module": "networks.deft_anima"},
+    "moslora": {"network_module": "networks.moslora_anima"},
     "tlora": {"network_module": "networks.tlora_anima"},
     "loha": {"network_module": "networks.loha"},
     "lokr": {"network_module": "lycoris.kohya", "lycoris_algo": "lokr"},
     "glokr": {"network_module": "lycoris.kohya", "lycoris_algo": "glokr"},
-    "tglokr": {"network_module": "lycoris.kohya", "lycoris_algo": "glokr"},
     "bokr": {"network_module": "lycoris.kohya", "lycoris_algo": "bokr"},
     "bora": {"network_module": "lycoris.kohya", "lycoris_algo": "bora"},
     "gsokr": {"network_module": "lycoris.kohya", "lycoris_algo": "gsokr"},
@@ -482,19 +496,67 @@ ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
 # (lycoris.kohya is ambiguous — _hydrate_lycoris_ui_fields_from_network_args
 # recovers those from network_args algo instead).
 _ANIMA_NETWORK_MODULE_TO_LORA_TYPE = {
+    "networks.lora_fa_anima": "lora_fa",
+    "networks.vera_anima": "vera",
+    "networks.delora_anima": "delora",
+    "networks.waveft_anima": "waveft",
+    "networks.deft_anima": "deft",
+    "networks.moslora_anima": "moslora",
     "networks.tlora_anima": "tlora",
     "networks.loha": "loha",
 }
 
+_ANIMA_NETWORK_ARG_TO_UI: dict[str, dict[str, str]] = {
+    "networks.lora_anima": {
+        "loraplus_lr_ratio": "loraplus_lr_ratio",
+        "loraplus_unet_lr_ratio": "loraplus_unet_lr_ratio",
+        "loraplus_text_encoder_lr_ratio": "loraplus_text_encoder_lr_ratio",
+        "pissa_init": "pissa_init",
+        "pissa_method": "pissa_method",
+        "pissa_niter": "pissa_niter",
+        "pissa_oversample": "pissa_oversample",
+        "pissa_apply_conv2d": "pissa_apply_conv2d",
+        "pissa_export_mode": "pissa_export_mode",
+    },
+    "networks.vera_anima": {
+        "vera_projection_seed": "vera_projection_seed",
+        "vera_save_projection": "vera_save_projection",
+        "vera_d_initial": "vera_d_initial",
+    },
+    "networks.delora_anima": {
+        "delora_lambda": "delora_lambda",
+    },
+    "networks.waveft_anima": {
+        "waveft_n_frequency": "waveft_n_frequency",
+        "waveft_scaling": "waveft_scaling",
+        "waveft_random_loc_seed": "waveft_random_loc_seed",
+        "waveft_use_idwt": "waveft_use_idwt",
+        "waveft_wavelet_family": "waveft_wavelet_family",
+    },
+    "networks.deft_anima": {
+        "deft_decomposition_method": "deft_decomposition_method",
+        "deft_alpha": "deft_alpha",
+        "deft_init_scale": "deft_init_scale",
+        "deft_init_weights": "deft_init_weights",
+    },
+    "networks.moslora_anima": {
+        "moslora_mixer_init": "moslora_mixer_init",
+    },
+    "networks.tlora_anima": {
+        "tlora_min_rank": "tlora_min_rank",
+        "tlora_rank_schedule": "tlora_rank_schedule",
+        "tlora_orthogonal_init": "tlora_orthogonal_init",
+    },
+}
 
-def _is_truthy_import_flag(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return False
+_ANIMA_BOOL_UI_FIELDS = frozenset({
+    "pissa_init",
+    "pissa_apply_conv2d",
+    "vera_save_projection",
+    "waveft_use_idwt",
+    "deft_init_weights",
+    "tlora_orthogonal_init",
+})
 
 
 def _is_invalid_import_scalar(value: str) -> bool:
@@ -558,12 +620,34 @@ def _hydrate_lycoris_ui_fields_from_network_args(config: dict) -> None:
 
     algo = str(parsed.get("algo") or config.get("lycoris_algo") or "").strip().lower()
     if algo and not config.get("lora_type"):
-        lora_type = _LYCORIS_ALGO_TO_LORA_TYPE.get(algo, algo)
-        # T-GLoKR shares algo=glokr with plain GLoKR; the time gates are what
-        # distinguish it, so recover the UI branch from that flag.
-        if lora_type == "glokr" and _is_truthy_import_flag(config.get("train_time_gates")):
-            lora_type = "tglokr"
-        config["lora_type"] = lora_type
+        config["lora_type"] = _LYCORIS_ALGO_TO_LORA_TYPE.get(algo, algo)
+
+
+def _hydrate_anima_ui_fields_from_network_args(config: dict) -> None:
+    network_module = str(config.get("network_module") or "").strip()
+    field_map = _ANIMA_NETWORK_ARG_TO_UI.get(network_module)
+    raw_args = config.get("network_args")
+    if field_map is None or not isinstance(raw_args, list):
+        return
+
+    parsed: dict[str, str] = {}
+    for item in raw_args:
+        parsed_item = _parse_network_arg_item(item)
+        if parsed_item is None:
+            continue
+        key, value = parsed_item
+        parsed[key.lower()] = value
+
+    for arg_key, ui_field in field_map.items():
+        if ui_field in config and config[ui_field] not in (None, ""):
+            continue
+        raw_value = parsed.get(arg_key)
+        if raw_value is None:
+            continue
+        config[ui_field] = _coerce_import_scalar(
+            raw_value,
+            as_bool=ui_field in _ANIMA_BOOL_UI_FIELDS,
+        )
 
 
 def _sanitize_arg_lines(config: dict, key: str) -> None:
@@ -606,6 +690,7 @@ def _finalize_import_config(config: dict) -> dict:
     _sanitize_arg_lines(normalized, "network_args")
     _sanitize_arg_lines(normalized, "optimizer_args")
     _hydrate_lycoris_ui_fields_from_network_args(normalized)
+    _hydrate_anima_ui_fields_from_network_args(normalized)
     _apply_anima_lora_type_consts(normalized)
     ensure_enable_preview_flag(normalized)
     return normalized

@@ -4,6 +4,174 @@ from mikazuki.anima_backend.adapter import adapt_anima_config
 
 
 class AnimaBackendAdapterTests(unittest.TestCase):
+    def test_rslora_type_maps_to_lycoris_with_rank_stabilized_scaling(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "rslora",
+                "network_dim": 16,
+                "network_alpha": 16,
+            }
+        )
+
+        self.assertEqual(adapted["network_module"], "lycoris.kohya")
+        self.assertIn("algo=lora", adapted["network_args"])
+        self.assertIn("rs_lora=True", adapted["network_args"])
+        self.assertEqual(warnings, [])
+
+    def test_dora_type_maps_to_lycoris_weight_decomposition(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "dora",
+                "network_dim": 16,
+                "network_alpha": 16,
+            }
+        )
+
+        self.assertEqual(adapted["network_module"], "lycoris.kohya")
+        self.assertIn("algo=lora", adapted["network_args"])
+        self.assertIn("dora_wd=True", adapted["network_args"])
+        self.assertEqual(warnings, [])
+
+    def test_lora_plus_type_injects_strict_lr_ratio(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "lora_plus",
+                "loraplus_lr_ratio": 16,
+            }
+        )
+
+        self.assertEqual(adapted["network_module"], "networks.lora_anima")
+        self.assertIn("loraplus_lr_ratio=16", adapted["network_args"])
+        self.assertNotIn("loraplus_lr_ratio", adapted)
+        self.assertEqual(warnings, [])
+
+    def test_lorafa_type_selects_real_network_and_required_optimizer(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "lora_fa",
+                "optimizer_type": "AdamW8bit",
+            }
+        )
+
+        self.assertEqual(adapted["network_module"], "networks.lora_fa_anima")
+        self.assertEqual(adapted["optimizer_type"], "LoRAFAAdamW")
+        self.assertTrue(any("LoRAFAAdamW" in warning for warning in warnings))
+
+    def test_vera_type_selects_real_network_and_projection_contract(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "vera",
+                "vera_projection_seed": 42,
+                "vera_save_projection": True,
+                "vera_d_initial": 0.1,
+            }
+        )
+
+        self.assertEqual(adapted["network_module"], "networks.vera_anima")
+        self.assertIn("vera_projection_seed=42", adapted["network_args"])
+        self.assertIn("vera_save_projection=True", adapted["network_args"])
+        self.assertIn("vera_d_initial=0.1", adapted["network_args"])
+        self.assertEqual(warnings, [])
+
+    def test_new_algorithm_fields_select_real_networks_and_are_forwarded(self):
+        cases = (
+            (
+                {
+                    "lora_type": "delora",
+                    "delora_lambda": 12.5,
+                },
+                "networks.delora_anima",
+                {"delora_lambda=12.5"},
+            ),
+            (
+                {
+                    "lora_type": "waveft",
+                    "waveft_n_frequency": 128,
+                    "waveft_scaling": 20,
+                    "waveft_random_loc_seed": 9,
+                    "waveft_use_idwt": False,
+                    "waveft_wavelet_family": "db1",
+                },
+                "networks.waveft_anima",
+                {
+                    "waveft_n_frequency=128",
+                    "waveft_scaling=20",
+                    "waveft_random_loc_seed=9",
+                    "waveft_use_idwt=False",
+                    "waveft_wavelet_family=db1",
+                },
+            ),
+            (
+                {
+                    "lora_type": "deft",
+                    "deft_decomposition_method": "qr",
+                    "deft_alpha": 16,
+                    "deft_init_scale": 1.5,
+                    "deft_init_weights": False,
+                },
+                "networks.deft_anima",
+                {
+                    "deft_decomposition_method=qr",
+                    "deft_alpha=16",
+                    "deft_init_scale=1.5",
+                    "deft_init_weights=False",
+                },
+            ),
+            (
+                {
+                    "lora_type": "moslora",
+                    "moslora_mixer_init": "orthogonal",
+                },
+                "networks.moslora_anima",
+                {"moslora_mixer_init=orthogonal"},
+            ),
+        )
+
+        for config, expected_module, expected_args in cases:
+            with self.subTest(lora_type=config["lora_type"]):
+                adapted, warnings = adapt_anima_config(config)
+                self.assertEqual(adapted["network_module"], expected_module)
+                self.assertTrue(
+                    expected_args.issubset(set(adapted["network_args"]))
+                )
+                self.assertEqual(warnings, [])
+
+    def test_false_vera_projection_flag_is_not_silently_dropped(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "vera",
+                "vera_save_projection": False,
+            }
+        )
+
+        self.assertIn("vera_save_projection=False", adapted["network_args"])
+        self.assertEqual(warnings, [])
+
+    def test_pissa_fields_are_forwarded_to_the_lora_network(self):
+        adapted, warnings = adapt_anima_config(
+            {
+                "lora_type": "lora",
+                "pissa_init": True,
+                "pissa_method": "rsvd",
+                "pissa_niter": 3,
+                "pissa_oversample": 6,
+                "pissa_apply_conv2d": True,
+                "pissa_export_mode": "LoRA无损兼容导出",
+            }
+        )
+
+        self.assertEqual(adapted["network_module"], "networks.lora_anima")
+        self.assertIn("pissa_init=True", adapted["network_args"])
+        self.assertIn("pissa_method=rsvd", adapted["network_args"])
+        self.assertIn("pissa_niter=3", adapted["network_args"])
+        self.assertIn("pissa_oversample=6", adapted["network_args"])
+        self.assertIn("pissa_apply_conv2d=True", adapted["network_args"])
+        self.assertIn(
+            "pissa_export_mode=LoRA无损兼容导出",
+            adapted["network_args"],
+        )
+        self.assertEqual(warnings, [])
+
     def test_adapter_keeps_supported_anima_fields(self):
         config = {
             "model_train_type": "anima-lora",
@@ -456,19 +624,35 @@ class LoraTypeOverrideTests(unittest.TestCase):
         self.assertEqual(adapted["network_module"], "lycoris.kohya")
         self.assertEqual(self._arg_value(adapted["network_args"], "algo"), "glokr")
 
-    def test_tglokr_derives_glokr_algo_and_time_gates(self):
-        adapted, _ = adapt_anima_config(
+    def test_removed_tglokr_fails_instead_of_training_plain_glokr(self):
+        from mikazuki.training_validation import TrainingConfigurationError
+
+        with self.assertRaises(TrainingConfigurationError):
+            adapt_anima_config(
+                {
+                    "pretrained_model_name_or_path": "model.safetensors",
+                    "lora_type": "tglokr",
+                    "network_module": "lycoris.kohya",
+                    "lycoris_algo": "glokr",
+                }
+            )
+
+    def test_stale_time_gate_fields_are_dropped_silently(self):
+        adapted, warnings = adapt_anima_config(
             {
                 "pretrained_model_name_or_path": "model.safetensors",
-                "lora_type": "tglokr",
-                "network_module": "networks.lora_anima",
-                "lycoris_algo": "lokr",
+                "lora_type": "glokr",
+                "network_module": "lycoris.kohya",
+                "lycoris_algo": "glokr",
+                "train_time_gates": True,
+                "time_gate_dim": 4,
             }
         )
-        self.assertEqual(adapted["network_module"], "lycoris.kohya")
         args = adapted["network_args"]
-        self.assertEqual(self._arg_value(args, "algo"), "glokr")
-        self.assertEqual(self._arg_value(args, "train_time_gates"), "True")
+        self.assertIsNone(self._arg_value(args, "train_time_gates"))
+        self.assertIsNone(self._arg_value(args, "time_gate_dim"))
+        self.assertNotIn("train_time_gates", adapted)
+        self.assertEqual([w for w in warnings if "time_gate" in w], [])
 
     def test_matching_values_produce_no_warnings(self):
         _, warnings = adapt_anima_config(

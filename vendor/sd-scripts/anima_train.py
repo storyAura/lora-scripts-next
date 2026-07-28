@@ -6,6 +6,7 @@ import copy
 import gc
 import math
 import os
+import sys
 from multiprocessing import Value
 from typing import List
 import toml
@@ -20,7 +21,17 @@ from library.sd3_train_utils import FlowMatchEulerDiscreteScheduler
 init_ipex()
 
 from accelerate.utils import set_seed
-from library import deepspeed_utils, anima_models, anima_train_utils, anima_utils, strategy_base, strategy_anima, sai_model_spec
+from library import (
+    anima_models,
+    anima_regional_compile,
+    anima_train_utils,
+    anima_utils,
+    deepspeed_utils,
+    sai_model_spec,
+    selective_activation_checkpointing,
+    strategy_anima,
+    strategy_base,
+)
 
 import library.train_util as train_util
 
@@ -71,6 +82,25 @@ def train(args):
     assert (
         args.blocks_to_swap is None or args.blocks_to_swap == 0
     ) or not args.unsloth_offload_checkpointing, "blocks_to_swap is not supported with unsloth_offload_checkpointing"
+    selective_activation_checkpointing.validate_selective_checkpoint_runtime(
+        args.anima_gradient_checkpointing_mode,
+        bool(args.gradient_checkpointing),
+        bool(args.cpu_offload_checkpointing),
+        bool(args.unsloth_offload_checkpointing),
+        args.blocks_to_swap,
+    )
+    anima_regional_compile.validate_anima_regional_compile_request(
+        bool(args.anima_compile_blocks),
+        sys.platform,
+        torch.cuda.is_available(),
+        torch.__version__,
+        bool(args.torch_compile),
+        args.anima_compile_backend,
+        args.blocks_to_swap,
+        "none",
+        bool(args.cpu_offload_checkpointing),
+        bool(args.unsloth_offload_checkpointing),
+    )
 
     cache_latents = args.cache_latents
     use_dreambooth_method = args.in_json is None
@@ -244,9 +274,24 @@ def train(args):
     )
 
     if args.gradient_checkpointing:
-        dit.enable_gradient_checkpointing(
-            cpu_offload=args.cpu_offload_checkpointing,
-            unsloth_offload=args.unsloth_offload_checkpointing,
+        if args.anima_gradient_checkpointing_mode == "selective":
+            dit.enable_selective_activation_checkpointing()
+        else:
+            dit.enable_gradient_checkpointing(
+                cpu_offload=args.cpu_offload_checkpointing,
+                unsloth_offload=args.unsloth_offload_checkpointing,
+            )
+    if args.anima_compile_blocks:
+        compile_report = anima_regional_compile.compile_anima_blocks(
+            dit,
+            args.anima_compile_backend,
+        )
+        logger.info(
+            "Regionally compiled Anima blocks",
+            extra={
+                "compile_backend": compile_report.backend,
+                "compiled_block_count": compile_report.compiled_block_count,
+            },
         )
 
     train_dit = args.learning_rate != 0

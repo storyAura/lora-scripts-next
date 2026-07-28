@@ -1,6 +1,7 @@
 # Anima LoRA training script
 
 import argparse
+import sys
 from typing import Any, Optional, Union
 
 import torch
@@ -12,11 +13,14 @@ init_ipex()
 
 from library import (
     anima_models,
+    anima_regional_compile,
     anima_train_utils,
     anima_utils,
+    base_model_quantization,
     flux_train_utils,
     qwen_image_autoencoder_kl,
     sd3_train_utils,
+    selective_activation_checkpointing,
     strategy_anima,
     strategy_base,
     train_util,
@@ -55,11 +59,66 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         train_dataset_group: Union[train_util.DatasetGroup, train_util.MinimalDataset],
         val_dataset_group: Optional[train_util.DatasetGroup],
     ):
+        if args.network_module == "networks.tlora_anima":
+            if args.network_train_text_encoder_only or not args.network_train_unet_only:
+                raise ValueError(
+                    "networks.tlora_anima requires "
+                    "--network_train_unet_only and does not support text "
+                    "encoder adapter training"
+                )
+        nonstandard_norm_modules = {
+            "networks.delora_anima",
+            "networks.waveft_anima",
+            "networks.deft_anima",
+            "networks.moslora_anima",
+        }
+        if (
+            args.network_module in nonstandard_norm_modules
+            and args.scale_weight_norms
+        ):
+            raise ValueError(
+                f"{args.network_module} does not support "
+                "--scale_weight_norms because its parameters are not "
+                "independent LoRA factors"
+            )
         if args.fp8_base or args.fp8_base_unet:
-            logger.warning("fp8_base and fp8_base_unet are not supported. / fp8_baseとfp8_base_unetはサポートされていません。")
-            args.fp8_base = False
-            args.fp8_base_unet = False
+            raise ValueError(
+                "Anima does not support fp8_base or fp8_base_unet; use "
+                "--base_model_quantization int8 or nf4 for a frozen LoRA base"
+            )
         args.fp8_scaled = False  # Anima DiT does not support fp8_scaled
+
+        base_model_quantization.validate_base_model_quantization_training_request(
+            args.base_model_quantization,
+            args.base_model_quantization_compute_dtype,
+            "anima",
+            args.network_module,
+            bool(args.fp8_base),
+            bool(args.fp8_base_unet),
+            args.blocks_to_swap,
+        )
+        base_model_quantization.normalize_skip_module_patterns(
+            args.base_model_quantization_skip_modules
+        )
+        selective_activation_checkpointing.validate_selective_checkpoint_runtime(
+            args.anima_gradient_checkpointing_mode,
+            bool(args.gradient_checkpointing),
+            bool(args.cpu_offload_checkpointing),
+            bool(args.unsloth_offload_checkpointing),
+            args.blocks_to_swap,
+        )
+        anima_regional_compile.validate_anima_regional_compile_request(
+            bool(args.anima_compile_blocks),
+            sys.platform,
+            torch.cuda.is_available(),
+            torch.__version__,
+            bool(args.torch_compile),
+            args.anima_compile_backend,
+            args.blocks_to_swap,
+            args.base_model_quantization,
+            bool(args.cpu_offload_checkpointing),
+            bool(args.unsloth_offload_checkpointing),
+        )
 
         if args.cache_text_encoder_outputs_to_disk and not args.cache_text_encoder_outputs:
             logger.warning("cache_text_encoder_outputs_to_disk is enabled, so cache_text_encoder_outputs is also enabled")
@@ -116,6 +175,24 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         logger.info("Loading Qwen3 text encoder...")
         qwen3_text_encoder, _ = anima_utils.load_qwen3_text_encoder(args.qwen3, dtype=weight_dtype, device="cpu")
         qwen3_text_encoder.eval()
+        if args.base_model_quantization != "none" and args.quantize_text_encoder:
+            qwen3_text_encoder.requires_grad_(False)
+            text_encoder_report = base_model_quantization.quantize_text_encoder_for_lora(
+                qwen3_text_encoder,
+                args.base_model_quantization,
+                args.base_model_quantization_compute_dtype,
+                base_model_quantization.normalize_skip_module_patterns(
+                    args.base_model_quantization_skip_modules
+                ),
+            )
+            logger.info(
+                "Quantized frozen Anima text encoder",
+                extra={
+                    "quantization_mode": text_encoder_report.mode,
+                    "converted_module_count": len(text_encoder_report.converted_modules),
+                    "skipped_module_count": len(text_encoder_report.skipped_modules),
+                },
+            )
 
         # Load VAE
         logger.info("Loading Anima VAE...")
@@ -132,7 +209,11 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
 
     def load_unet_lazily(self, args, weight_dtype, accelerator, text_encoders) -> tuple[nn.Module, list[nn.Module]]:
         loading_dtype = None if args.fp8_scaled else weight_dtype
-        loading_device = "cpu" if self.is_swapping_blocks else accelerator.device
+        loading_device = (
+            "cpu"
+            if self.is_swapping_blocks or args.base_model_quantization != "none"
+            else accelerator.device
+        )
 
         attn_mode = "torch"
         if args.xformers:
@@ -151,6 +232,27 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
             loading_dtype,
             args.fp8_scaled,
         )
+        if args.base_model_quantization != "none":
+            model.requires_grad_(False)
+            quantization_report = base_model_quantization.quantize_model_for_lora(
+                model,
+                "anima",
+                args.base_model_quantization,
+                args.base_model_quantization_compute_dtype,
+                base_model_quantization.normalize_skip_module_patterns(
+                    args.base_model_quantization_skip_modules
+                ),
+            )
+            logger.info(
+                "Quantized frozen Anima DiT",
+                extra={
+                    "quantization_mode": quantization_report.mode,
+                    "converted_module_count": len(quantization_report.converted_modules),
+                    "skipped_module_count": len(quantization_report.skipped_modules),
+                    "original_weight_bytes": quantization_report.original_weight_bytes,
+                    "estimated_quantized_weight_bytes": quantization_report.estimated_quantized_weight_bytes,
+                },
+            )
 
         # Store unsloth preference so that when the base NetworkTrainer calls
         # dit.enable_gradient_checkpointing(cpu_offload=...), we can override to use unsloth.
@@ -450,6 +552,9 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
         metadata["ss_timestep_sampling"] = args.timestep_sampling
         metadata["ss_sigmoid_scale"] = args.sigmoid_scale
         metadata["ss_discrete_flow_shift"] = args.discrete_flow_shift
+        metadata["ss_anima_gradient_checkpointing_mode"] = args.anima_gradient_checkpointing_mode
+        metadata["ss_anima_compile_blocks"] = bool(args.anima_compile_blocks)
+        metadata["ss_anima_compile_backend"] = args.anima_compile_backend
 
     def is_text_encoder_not_needed_for_training(self, args):
         return args.cache_text_encoder_outputs and not self.is_train_text_encoder(args)
@@ -464,8 +569,25 @@ class AnimaNetworkTrainer(train_network.NetworkTrainer):
     ) -> torch.nn.Module:
         # The base NetworkTrainer only calls enable_gradient_checkpointing(cpu_offload=True/False),
         # so we re-apply with unsloth_offload if needed (after base has already enabled it).
-        if self._use_unsloth_offload_checkpointing and args.gradient_checkpointing:
+        if (
+            args.anima_gradient_checkpointing_mode == "selective"
+            and args.gradient_checkpointing
+        ):
+            unet.enable_selective_activation_checkpointing()
+        elif self._use_unsloth_offload_checkpointing and args.gradient_checkpointing:
             unet.enable_gradient_checkpointing(unsloth_offload=True)
+        if args.anima_compile_blocks:
+            compile_report = anima_regional_compile.compile_anima_blocks(
+                unet,
+                args.anima_compile_backend,
+            )
+            logger.info(
+                "Regionally compiled Anima blocks",
+                extra={
+                    "compile_backend": compile_report.backend,
+                    "compiled_block_count": compile_report.compiled_block_count,
+                },
+            )
 
         if not self.is_swapping_blocks:
             return super().prepare_unet_with_accelerator(args, accelerator, unet)

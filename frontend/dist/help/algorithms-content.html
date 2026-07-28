@@ -102,9 +102,11 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <a href="#quick">快速选择</a>
   <a href="#basics">基础概念</a>
   <a href="#lora">LoRA</a>
+  <a href="#rslora">rsLoRA</a>
+  <a href="#lora_plus">LoRA+</a>
+  <a href="#dora">DoRA</a>
   <a href="#lokr">LoKr</a>
   <a href="#glokr">GLoKR</a>
-  <a href="#tglokr">T-GLoKR</a>
   <a href="#bokr">BoKR</a>
   <a href="#bora">BoRA</a>
   <a href="#gsokr">GloKrSora</a>
@@ -112,6 +114,10 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <a href="#tlora">T-LoRA</a>
   <a href="#lora_fa">LoRA-FA</a>
   <a href="#vera">VeRA</a>
+  <a href="#delora">DeLoRA</a>
+  <a href="#waveft">WaveFT</a>
+  <a href="#deft">DEFT</a>
+  <a href="#moslora">MoSLoRA</a>
   <a href="#loha">LoHa</a>
   <a href="#custom">自定义 network_args</a>
 </nav>
@@ -123,9 +129,11 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>算法</th><th>一句话</th><th>参数量</th><th>适合场景</th></tr>
     <tr><td><code>lora</code></td><td>最经典的低秩适配，万金油</td><td>中</td><td>人物 / 概念 / 常规训练，首选</td></tr>
+    <tr><td><code>rslora</code></td><td>用 α/√rank 缩放高 rank LoRA</td><td>中</td><td>rank 较高、担心缩放过弱</td></tr>
+    <tr><td><code>lora_plus</code></td><td>down/up 矩阵使用不同学习率</td><td>中</td><td>想加快收敛且保持标准 LoRA 产物</td></tr>
+    <tr><td><code>dora</code></td><td>分开学习权重方向与幅度</td><td>中</td><td>低 rank 表达力和幅度控制</td></tr>
     <tr><td><code>lokr</code></td><td>Kronecker 积分解，参数更省</td><td>小</td><td>画风训练、泛化要求高</td></tr>
     <tr><td><code>glokr</code></td><td>LoKr + GLoRA 三路径融合，画风特化</td><td>小</td><td>画风训练主推，默认即推荐配置</td></tr>
-    <tr><td><code>tglokr</code></td><td>GLoKR + 时间步门控（本地原创，实验性）</td><td>小</td><td>画风；想让路径配比随去噪阶段自适应</td></tr>
     <tr><td><code>bokr</code></td><td>LoKr + BoRA 双向幅值解耦</td><td>小</td><td>画风，想要更稳的幅度控制</td></tr>
     <tr><td><code>bora</code></td><td>LoRA + BoRA 双向幅值解耦</td><td>中</td><td>常规训练 + 幅度解耦收益</td></tr>
     <tr><td><code>gsokr</code></td><td>GLoKR 的 SoRA 稀疏化变体（实验）</td><td>小</td><td>想自动裁剪冗余 rank 的尝鲜者</td></tr>
@@ -133,6 +141,10 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>tlora</code></td><td>按时间步动态调 rank，抗过拟合</td><td>中</td><td>小数据集、容易过拟合的题材</td></tr>
     <tr><td><code>lora_fa</code></td><td>冻结 down 矩阵的 LoRA，省显存</td><td>中</td><td>显存吃紧时的 LoRA 替代</td></tr>
     <tr><td><code>vera</code></td><td>共享随机矩阵 + 只学缩放向量</td><td>极小</td><td>极限省参数 / 快速实验</td></tr>
+    <tr><td><code>delora</code></td><td>按底模列范数约束归一化低秩更新</td><td>中</td><td>个性化训练与更新幅度控制</td></tr>
+    <tr><td><code>waveft</code></td><td>只学习稀疏小波频谱系数</td><td>极小</td><td>极限压缩、实验性个性化</td></tr>
+    <tr><td><code>deft</code></td><td>补空间投影 + 低秩注入</td><td>中</td><td>研究遗忘控制与结构保持</td></tr>
+    <tr><td><code>moslora</code></td><td>在 LoRA rank 内增加可学习混合矩阵</td><td>中</td><td>增强低秩子空间交互</td></tr>
     <tr><td><code>loha</code></td><td>Hadamard 积低秩，细节表达强</td><td>中</td><td>画风 / 细节向（经典 LyCORIS）</td></tr>
   </table>
   </div>
@@ -157,9 +169,33 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
     <tr><td><code>network_dropout</code></td><td>0</td><td>LoRA dropout 概率，抑制过拟合</td></tr>
-    <tr><td><code>pissa_init</code></td><td>关</td><td>PiSSA 初始化：用底模权重的主成分方向做起点，收敛更快（实验性）。开启后可进一步选择分解方式与导出模式</td></tr>
+    <tr><td><code>pissa_init</code></td><td>关</td><td>PiSSA 初始化：使用 SVD/rSVD 主奇异方向并同步残差化底模，初始函数保持不变；支持无损标准 LoRA 差分导出与续训状态恢复</td></tr>
   </table>
   </div>
+</section>
+
+<section class="card" id="rslora">
+  <h2>rsLoRA <span class="algo-tag tag-std">标准 LoRA 变体</span></h2>
+  <p class="lead">Rank-Stabilized LoRA 把缩放从 α/r 改为 α/√r，避免 rank 增大时有效更新被过度压小。checkpoint 仍使用标准 LoRA 的 A/B 矩阵。</p>
+  <div class="tip">界面选择 <code>rslora</code> 会显式写入 <code>rs_lora=True</code>；适合 rank 32 以上的对照实验，低 rank 不一定优于普通 LoRA。</div>
+</section>
+
+<section class="card" id="lora_plus">
+  <h2>LoRA+ <span class="algo-tag tag-std">标准 LoRA 变体</span></h2>
+  <p class="lead">LoRA+ 保持 ΔW=B×A 不变，但让 up/B 矩阵使用 down/A 的若干倍学习率，以改善两个因子的优化速度差异。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>loraplus_lr_ratio</code></td><td>16</td><td>up/B 相对 down/A 的学习率倍率，必须为正数</td></tr>
+  </table>
+  </div>
+  <div class="tip">产物仍是标准 LoRA；倍率只改变训练优化过程，不改变推理公式。</div>
+</section>
+
+<section class="card" id="dora">
+  <h2>DoRA <span class="algo-tag tag-std">权重解耦</span></h2>
+  <p class="lead">DoRA 把 LoRA 更新后的权重分成方向与每个输出通道的幅度，低秩矩阵学习方向，单独向量学习幅度。</p>
+  <div class="tip warn">DoRA 与 bypass 模式互斥；量化基座当前只支持普通 LoRA/rsLoRA/LoRA+，不要把 DoRA 与 INT8/NF4 基座组合。</div>
 </section>
 
 <section class="card" id="lokr">
@@ -205,26 +241,6 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <div class="tip warn">network_dim 建议 32~64（GLoKR 参数量远小于同 dim 的 LoRA，开 64 无压力）；<code>bypass_mode</code> 与 DoRA/BoRA 互斥。</div>
 </section>
 
-<section class="card" id="tglokr">
-  <h2>T-GLoKR <span class="algo-tag tag-local">本地原创</span><span class="algo-tag tag-exp">实验性</span></h2>
-  <p class="lead">T-GLoKR = GLoKR + <b>时间步门控</b>。GLoKR 的三条路径本就分工不同，但它们的配比在整个去噪过程中是固定的；T-GLoKR 让每条路径各学一条「随去噪进度变化的出力曲线」，把「哪个阶段该用哪条路」从人工设定变成梯度自己发现。</p>
-  <ul>
-    <li><b>灵感来源</b>：T-LoRA（AAAI 2026）发现<b>高噪声阶段最容易过拟合</b>（那时画布几乎全是噪声，全容量适配器学的是"背噪声"），它的对策是按时间步调节 rank 的<b>数量</b>；T-GLoKR 调节的则是容量的<b>类型</b>——高噪声期可以更多依赖"贴着底模走"的 A 路（结构安全），细节期再放开自由增量的 B 路。</li>
-    <li><b>怎么实现</b>：每个模块一个极小的门控头（正弦编码时间步 → 3 个 0~2 之间的系数，分别乘在 B/A/C 三条路径上）。整个模型增加的参数不到 1%。</li>
-    <li><b>安全设计</b>：门控<b>零初始化</b>，训练第 0 步与普通 GLoKR <b>逐位一致</b>；旧 GLoKR 存档可直接加载（按无门控处理），T-GLoKR 存档也能在不支持的环境退化加载。</li>
-    <li><b>怎么看效果</b>：训练完把各层门控参数取出来画曲线，就是模型自己总结的「路径-时段分工表」。与 T-LoRA 的先验一致 = 相互印证；不一致 = 新发现。</li>
-  </ul>
-  <div class="table-scroll">
-  <table>
-    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
-    <tr><td><code>time_gate_dim</code></td><td>4</td><td>时间门控的正弦编码频率数 K。越大越能表达复杂时段曲线，参数量每模块 3×(2K+1)</td></tr>
-    <tr><td><code>train_gates</code></td><td>开</td><td>静态路径门控，管"这层这条路总体多重要"；与时间门控相乘，两者互补</td></tr>
-    <tr><td><code>use_g_out</code></td><td>关</td><td>输出侧 C 路。时间门控下它最可能学出"中低噪声段发力"的曲线，值得开一轮对照</td></tr>
-    <tr><td colspan="3">其余参数（kron_rank / use_bora / bora_iters / init_mode / lokr_factor 等）与 <a class="back-link" href="#glokr">GLoKR</a> 完全相同</td></tr>
-  </table>
-  </div>
-  <div class="tip warn">实验性算法：<b>时变的增量无法完美烘焙成静态权重</b>——挂载出图（正常用法）完整保留时变行为；若要 merge 进底模，只能用平均门控近似，属有损。另：门控按 batch 内平均时间步计算，本项目默认 batch_size=1 时为逐样本精确。</div>
-</section>
 <section class="card" id="bokr">
   <h2>BoKR <span class="algo-tag tag-local">本地扩展</span></h2>
   <p class="lead">BoKR = LoKr + BoRA 双向权重解耦。骨架与 LoKr 相同（Kronecker 低秩），在合并时对行、列两个方向做范数归一 + 可学习缩放，幅度控制比 DoRA（仅单向）更均匀。</p>
@@ -290,21 +306,75 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>tlora_orthogonal_init</code></td><td>开</td><td>对 lora_down 用正交初始化，加速收敛</td></tr>
   </table>
   </div>
-  <div class="tip">network_dim 建议 32（动态 rank 需要更大的基础维度），network_alpha 建议等于 network_dim。</div>
+  <div class="tip">network_dim 建议 32（动态 rank 需要更大的基础维度），network_alpha 建议等于 network_dim。训练器必须在每次前向前注入 timestep；缺失时会明确失败，且时变适配器不能静态 merge。</div>
 </section>
 
 <section class="card" id="lora_fa">
   <h2>LoRA-FA <span class="algo-tag tag-local">本地扩展</span></h2>
   <p class="lead">Frozen-A LoRA：冻结 down（A）矩阵、只训练 up（B）矩阵。A 不更新就不用存它的优化器状态和激活梯度，显存占用明显下降，效果接近普通 LoRA。显存吃紧时的替代方案。</p>
-  <div class="tip warn">⚠ 当前版本尚未接入独立实现：选择 LoRA-FA 实际训练行为等同标准 LoRA（冻结逻辑未生效）。</div>
+  <div class="tip">A/down 矩阵冻结，仅训练 B/up；LoRAFAAdamW 按 AAT 伪逆修正 B 梯度，checkpoint 会写入算法身份元数据。</div>
   <p>界面参数与 LoRA 相同（<code>network_dropout</code>）。</p>
 </section>
 
 <section class="card" id="vera">
   <h2>VeRA <span class="algo-tag tag-local">本地扩展</span></h2>
   <p class="lead">Vector-based Random-matrix Adaptation：所有层共享一对<b>冻结的随机</b>低秩矩阵，每层只训练两个小小的缩放向量。可训练参数比 LoRA 少一到两个量级——参数极限压缩的选择，表达力也相应有限。</p>
-  <div class="tip warn">⚠ 当前版本尚未接入独立实现：选择 VeRA 实际训练行为等同标准 LoRA。</div>
+  <div class="tip">所有目标层共享冻结随机 A/B 投影，仅训练每层 lambda_b/lambda_d；投影可直接保存，也可由确定性种子重建。</div>
   <p>界面参数与 LoRA 相同（<code>network_dropout</code>）。</p>
+</section>
+
+<section class="card" id="delora">
+  <h2>DeLoRA <span class="algo-tag tag-local">本地扩展</span><span class="algo-tag tag-exp">实验性</span></h2>
+  <p class="lead">DeLoRA 对 A 的每一行和 B 的每一列做范数归一，再按冻结底模的输入列范数缩放更新，使不同层、不同方向的更新幅度更可控。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>delora_lambda</code></td><td>15</td><td>更新强度 λ，必须为正有限数；值越大适配幅度越强</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">仅支持 Linear 层；不支持 rank_dropout 或 scale_weight_norms。checkpoint 会保存底模列范数，因此可重现并可 merge。</div>
+</section>
+
+<section class="card" id="waveft">
+  <h2>WaveFT <span class="algo-tag tag-local">本地扩展</span><span class="algo-tag tag-exp">实验性</span></h2>
+  <p class="lead">WaveFT 不学习 LoRA A/B，而是在权重频域中选择固定位置，只训练少量谱系数；默认通过 Haar/db1 逆小波变换重建稠密 ΔW。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>waveft_n_frequency</code></td><td>2592</td><td>每层可训练频率数量，不得超过该层权重元素数</td></tr>
+    <tr><td><code>waveft_scaling</code></td><td>25</td><td>重建后 ΔW 的缩放系数</td></tr>
+    <tr><td><code>waveft_random_loc_seed</code></td><td>777</td><td>频率位置的确定性种子，实际索引也写入 checkpoint</td></tr>
+    <tr><td><code>waveft_use_idwt</code></td><td>开</td><td>使用 Haar/db1 逆小波重建；关闭则直接学习稀疏权重位置</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">仅支持 Linear 层和 Haar/db1；不支持 rank_dropout 或 scale_weight_norms。频率数必须按最小目标层尺寸选择，配置过大会在启动时明确失败。</div>
+</section>
+
+<section class="card" id="deft">
+  <h2>DEFT <span class="algo-tag tag-local">本地扩展</span><span class="algo-tag tag-exp">实验性</span></h2>
+  <p class="lead">DEFT 先从底模权重移除一个可学习投影子空间，再在同一子空间注入低秩更新：W′=(I−QQᵀ)W+QR。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>deft_decomposition_method</code></td><td>qr</td><td>qr 使用正交投影；relu 使用 P·ReLU(P)ᵀ 非正交投影</td></tr>
+    <tr><td><code>deft_alpha</code></td><td>0</td><td>注入项缩放；0 表示 1，正值按 alpha/r 缩放</td></tr>
+    <tr><td><code>deft_init_weights</code></td><td>开</td><td>初始化时精确抵消投影移除，使第 0 步输出等于底模</td></tr>
+    <tr><td><code>deft_init_scale</code></td><td>1</td><td>仅关闭零扰动初始化时缩放随机 R 的标准差</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">仅支持 Linear 层；不支持 rank_dropout 或 scale_weight_norms。QR 路径在 FP32 中计算投影以保护 BF16 稳定性。</div>
+</section>
+
+<section class="card" id="moslora">
+  <h2>MoSLoRA <span class="algo-tag tag-local">本地扩展</span><span class="algo-tag tag-exp">实验性</span></h2>
+  <p class="lead">MoSLoRA 在标准 ΔW=B×A 中插入可学习的 rank×rank 混合矩阵 M，形成 ΔW=B×M×A，让低秩子空间内部可以重新组合。</p>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>moslora_mixer_init</code></td><td>kaiming</td><td>kaiming 对齐论文设置；identity 从标准 LoRA 子空间开始；orthogonal 保持混合能量</td></tr>
+  </table>
+  </div>
+  <div class="tip">仅支持 Linear 层，不支持 scale_weight_norms；导出为标准 LoRA 时会把 M 折叠进 B，因此推理端不需要专用模块。</div>
 </section>
 
 <section class="card" id="loha">
@@ -319,7 +389,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <li>常用参数都已可视化；「自定义 network_args」仅用于极少数未上界面的进阶项（如 <code>wd_on_output=False</code>、<code>rs_lora=True</code>、<code>preset=xxx.toml</code>）。</li>
     <li><b>界面字段优先</b>：同名参数同时出现在界面与自定义框时，以界面显示的值为准（所见即所得）。</li>
     <li>本地扩展算法仅作用于 Linear 层，Conv / Norm 层自动跳过，属预期行为，日志中的 skip 提示无需理会。</li>
-    <li>训练模块归属：<code>lora / tlora / lora_fa / vera / loha</code> 走内置 networks 实现；<code>lokr / glokr / bokr / bora / gsokr / glora_boft</code> 走 <code>lycoris.kohya</code>，系统会自动注入 Anima 专用 preset（声明可训练模块），无需手动配置。</li>
+    <li>训练模块归属：<code>lora / rslora / lora_plus / dora / tlora / lora_fa / vera / delora / waveft / deft / moslora</code> 走内置 networks 实现；<code>lokr / glokr / bokr / bora / gsokr / glora_boft / loha</code> 走 <code>lycoris.kohya</code>，系统会自动注入 Anima 专用 preset（声明可训练模块），无需手动配置。</li>
   </ul>
 </section>
 
