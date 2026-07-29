@@ -523,7 +523,7 @@ function getChartTheme() {
     return value || fallback;
   };
   chartThemeCache = {
-    tooltipBg: "rgba(10,14,26,0.96)",
+    tooltipBg: pick("--color-tooltip-bg", "rgba(255,255,255,0.97)"),
     border: pick("--line", "#243049"),
     text: pick("--text", "#e8eef7"),
     axis: pick("--color-chart-axis", "#9aa7bd"),

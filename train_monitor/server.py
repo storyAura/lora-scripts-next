@@ -608,6 +608,83 @@ def _scan_repeat_subsets(base_dir: str, *, require_repeat_prefix: bool) -> dict:
     return result
 
 
+def _make_bucket_resolutions(max_reso: tuple[int, int], min_size: int, max_size: int, divisible: int) -> list[tuple[int, int]]:
+    # 与 vendor/sd-scripts/library/model_util.py make_bucket_resolutions 同款数学
+    max_area = max_reso[0] * max_reso[1]
+    resos = set()
+    width = int(math.sqrt(max_area) // divisible) * divisible
+    resos.add((width, width))
+    width = min_size
+    while width <= max_size:
+        height = min(max_size, int((max_area // width) // divisible) * divisible)
+        if height >= min_size:
+            resos.add((width, height))
+            resos.add((height, width))
+        width += divisible
+    return sorted(resos)
+
+
+_BUCKET_ESTIMATE_CACHE: dict[tuple, dict] = {}
+_BUCKET_ESTIMATE_TTL = 30.0
+
+
+def _estimate_bucket_batches(subsets: list[dict], base_dir: Path, bs: int, config: dict) -> dict | None:
+    """ARB 桶感知的每轮 batch 数：按 kohya 规则把图片分桶后逐桶向上取整求和。
+
+    返回 {"batches": int, "buckets": int}；无法模拟（PIL 缺失/图片读不出）返回 None。
+    """
+    reso_str = str(config.get("resolution") or "1024,1024")
+    parts = [p for p in re.split(r"[,x× ]+", reso_str.strip()) if p]
+    try:
+        reso_w = int(parts[0])
+        reso_h = int(parts[1]) if len(parts) > 1 else reso_w
+    except (ValueError, IndexError):
+        return None
+    min_size = _positive_int(config.get("min_bucket_reso", "256"))
+    max_size = _positive_int(config.get("max_bucket_reso", "1024"))
+    divisible = _positive_int(config.get("bucket_reso_steps", "64"))
+
+    key = (str(base_dir), bs, reso_w, reso_h, min_size, max_size, divisible)
+    now = time.time()
+    cached = _BUCKET_ESTIMATE_CACHE.get(key)
+    if cached and now - cached["at"] < _BUCKET_ESTIMATE_TTL:
+        return cached["value"]
+
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+
+    resos = _make_bucket_resolutions((reso_w, reso_h), min_size, max_size, divisible)
+    resos_set = set(resos)
+    aspect_ratios = [w / h for w, h in resos]
+    bucket_counts: dict[tuple[int, int], int] = {}
+    for subset in subsets:
+        subset_dir = base_dir / subset["name"] if (base_dir / subset["name"]).is_dir() else base_dir
+        for image_path in subset_dir.iterdir():
+            if not image_path.is_file() or image_path.suffix.lower() not in IMAGE_EXTS:
+                continue
+            try:
+                with Image.open(image_path) as im:
+                    width, height = im.size
+            except OSError:
+                continue
+            if (width, height) in resos_set:
+                reso = (width, height)
+            else:
+                aspect = width / height
+                reso = min(zip(aspect_ratios, resos), key=lambda item: abs(item[0] - aspect))[1]
+            bucket_counts[reso] = bucket_counts.get(reso, 0) + subset["repeats"]
+    if not bucket_counts:
+        return None
+    value = {
+        "batches": sum(math.ceil(count / bs) for count in bucket_counts.values()),
+        "buckets": len(bucket_counts),
+    }
+    _BUCKET_ESTIMATE_CACHE[key] = {"at": now, "value": value}
+    return value
+
+
 def estimate_training_steps(config: dict, engine: str = "kohya", runtime_metrics: dict | None = None) -> dict:
     runtime_total = _runtime_total_steps(runtime_metrics)
     train_data_dir = config.get("train_data_dir") or config.get("source_image_dir") or ""
@@ -652,8 +729,21 @@ def estimate_training_steps(config: dict, engine: str = "kohya", runtime_metrics
 
     bs = _positive_int(config.get("train_batch_size", "1"))
     ga = _positive_int(config.get("gradient_accumulation_steps", "1"))
-    batches_per_epoch = math.ceil(samples / bs)
+    naive_batches_per_epoch = math.ceil(samples / bs)
+    batches_per_epoch = naive_batches_per_epoch
+    bucket_est = None
+    bucket_note = ""
+    # ARB 桶：每个纵横比桶单独凑批、逐桶取整，实际步数 ≥ 简单估算
+    if str(config.get("enable_bucket", "")).strip().lower() in ("true", "1") and not reg_raw:
+        base = resolved if resolved else Path(train_data_dir)
+        bucket_est = _estimate_bucket_batches(train_scan["subsets"], Path(base), bs, config)
+        if bucket_est:
+            batches_per_epoch = bucket_est["batches"]
+            bucket_note = f"ARB {bucket_est['buckets']}桶"
+        else:
+            bucket_note = "ARB 桶未计入,实际或略多"
     steps_per_epoch = math.ceil(batches_per_epoch / ga)
+    naive_steps_per_epoch = math.ceil(naive_batches_per_epoch / ga)
     subset_parts = [
         f"{item['name']}:{item['raw']}x{item['repeats']}r"
         for item in train_scan["subsets"]
@@ -662,12 +752,16 @@ def estimate_training_steps(config: dict, engine: str = "kohya", runtime_metrics
     if reg_raw:
         detail_parts.append(f"+{reg_raw}正则")
     detail_parts.append(f"÷ BS{bs * ga}")
+    if bucket_note:
+        detail_parts.append(f"· {bucket_note}")
     estimate.update({
         "batches_per_epoch": batches_per_epoch,
         "steps_per_epoch": steps_per_epoch,
         "effective_batch_size": bs * ga,
         "detail": " ".join(detail_parts),
     })
+    if bucket_est:
+        estimate["bucket_count"] = bucket_est["buckets"]
 
     epochs_str = config.get("max_train_epochs", "")
     steps_str = config.get("max_train_steps", "")
@@ -676,6 +770,10 @@ def estimate_training_steps(config: dict, engine: str = "kohya", runtime_metrics
         estimate["epochs"] = epochs
         if not runtime_total:
             estimate["total_steps"] = epochs * steps_per_epoch
+        if bucket_est:
+            estimate["bucket_compare"] = (
+                f"理论{epochs * naive_steps_per_epoch} → 实际{epochs * steps_per_epoch}"
+            )
     elif steps_str and not runtime_total:
         estimate["total_steps"] = _positive_int(steps_str)
         estimate["manual_steps"] = True
@@ -705,10 +803,11 @@ def _extract_train_params(config: dict, engine: str | None = None, runtime_metri
     if step_estimate.get("runtime_total") and step_estimate.get("total_steps"):
         params.append({"label": step_label, "value": f"{step_estimate['total_steps']}（训练器实时）"})
     elif step_estimate.get("total_steps") and step_estimate.get("epochs"):
-        params.append({
-            "label": step_label,
-            "value": f"{step_estimate['total_steps']}（{step_estimate.get('detail', '')} × {step_estimate['epochs']}ep）",
-        })
+        compare = step_estimate.get("bucket_compare", "")
+        value = f"{step_estimate['total_steps']}（{step_estimate.get('detail', '')} × {step_estimate['epochs']}ep"
+        if compare:
+            value += f" · {compare}"
+        params.append({"label": step_label, "value": value + "）"})
     elif step_estimate.get("total_steps") and step_estimate.get("manual_steps"):
         params.append({"label": step_label, "value": f"{step_estimate['total_steps']}（手动设定）"})
     elif step_estimate.get("steps_per_epoch"):
@@ -859,17 +958,34 @@ def update_progress_health(task_id: str, task_status: str, metrics: dict) -> Non
 # Model type inference
 # ---------------------------------------------------------------------------
 
+# (marker, display) — 顺序即优先级。具体算法必须排在 LoKr 之前：
+# 日志里的 GLoKRModule 包含子串 lokrmodule，先查 lokr 会把一切误报成 LoKr。
+_ADAPTER_MARKERS: list[tuple[tuple[str, ...], str]] = [
+    (("enable tlora", "tlora_anima", '"tlora"'), "T-LoRA"),
+    (("glokrsoramodule", "algo=gsokr", '"gsokr"'), "GSoKR"),
+    (("glokrmodule", "algo=glokr", '"glokr"'), "GLoKR"),
+    (("bokrmodule", "algo=bokr", '"bokr"'), "BoKR"),
+    (("boramodule", "algo=bora", '"bora"'), "BoRA"),
+    (("cdkamodule", "algo=cdka", '"cdka"'), "CDKA"),
+    (("glorabo", "algo=glora_boft", '"glora_boft"'), "GLoRA-BOFT"),
+    (("lokrmodule", "algo=lokr", "algo = lokr", '"lokr"'), "LoKr"),
+    (("lohamodule", "networks.loha", '"loha"'), "LoHa"),
+    (('"lora_fa"',), "LoRA-FA"),
+    (('"vera"',), "VeRA"),
+    (('"rslora"',), "rsLoRA"),
+    (('"dora"',), "DoRA"),
+    (('"lora_plus"',), "LoRA+"),
+    (('"delora"', "deloramodule"), "DeLoRA"),
+    (('"waveft"', "waveftmodule"), "WaveFT"),
+    (('"deft"', "deftmodule"), "DEFT"),
+    (('"moslora"', "mosloramodule"), "MoSLoRA"),
+]
+
+
 def _infer_adapter_type(source: str) -> str:
-    if "enable tlora" in source or "tlora_anima" in source or '"tlora"' in source or "lora_type = \"tlora\"" in source:
-        return "T-LoRA"
-    if "lokrmodule" in source or "algo=lokr" in source or "algo = lokr" in source or '"lokr"' in source or "lora_type = \"lokr\"" in source:
-        return "LoKr"
-    if "lohamodule" in source or "networks.loha" in source:
-        return "LoHa"
-    if "lora_type = \"lora_fa\"" in source or '"lora_fa"' in source:
-        return "LoRA-FA"
-    if "lora_type = \"vera\"" in source or '"vera"' in source:
-        return "VeRA"
+    for markers, display in _ADAPTER_MARKERS:
+        if any(marker in source for marker in markers):
+            return display
     if "lycoris.kohya" in source:
         return "LyCORIS"
     return "LoRA"

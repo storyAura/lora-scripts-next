@@ -32,6 +32,7 @@
   --color-chart-area: rgba(87, 77, 56, 0.08);
   --color-chart-grid: #e9e2d0;
   --color-chart-axis: #847964;
+  --color-tooltip-bg: rgba(255, 255, 255, 0.97);
 
   --color-progress-train: var(--color-accent-primary);
   --color-progress-sample: var(--color-accent-secondary);

@@ -6,30 +6,31 @@
 <script>if (window.self === window.top) { location.replace("/help/training-params.html"); }</script>
 <title>训练参数说明 - SD Trainer</title>
 <style>
+/* 主视觉配色：奶油咖啡单色渐变（与主界面同套），淡白底 + 咖啡字 */
 :root {
-  --bg: #f7f8fc;
+  --bg: #faf8f1;
   --card: #ffffff;
-  --text: #1f2328;
-  --text-sub: #5b6472;
-  --border: #e4e8f1;
-  --accent: #4f46e5;
-  --accent-soft: rgba(79, 70, 229, 0.10);
+  --text: #2d2411;
+  --text-sub: #847964;
+  --border: #e9e2d0;
+  --accent: #574d38;
+  --accent-soft: rgba(87, 77, 56, 0.10);
   --good: #16a34a;
   --warn: #d97706;
-  --code-bg: #f1f3f9;
+  --code-bg: #f1ecdd;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1218;
-    --card: #171b23;
-    --text: #e6e9ef;
-    --text-sub: #9aa4b2;
-    --border: #2a3140;
-    --accent: #818cf8;
-    --accent-soft: rgba(129, 140, 248, 0.14);
+    --bg: #110900;
+    --card: #1a1206;
+    --text: #f1e5cd;
+    --text-sub: #b4a992;
+    --border: #2d2411;
+    --accent: #dfd4bc;
+    --accent-soft: rgba(223, 212, 188, 0.14);
     --good: #4ade80;
     --warn: #fbbf24;
-    --code-bg: #1f2530;
+    --code-bg: #241a0a;
   }
 }
 * { box-sizing: border-box; }
@@ -100,6 +101,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <a href="#train">训练核心</a>
   <a href="#lr">学习率与优化器</a>
   <a href="#network">网络设置</a>
+  <a href="#algo-params">算法专属参数</a>
   <a href="#preview">预览图</a>
   <a href="#caption">Caption 标签</a>
   <a href="#noise">噪声</a>
@@ -289,6 +291,57 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   </div>
   <div class="tip warn">另注意：LyCORIS 系算法（LoKr/GLoKR/BoKR/BoRA/GSoKR/rsLoRA/DoRA/CDKA…）的 <code>dropout</code> 只在 <code>bypass_mode</code> 开启时生效，常规前向不应用（界面各字段已标注）。</div>
   <div class="tip">lora_type（LoRA / LoKr / GLoKR / T-LoRA…）的算法区别与每种算法的专属参数，见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a>。</div>
+</section>
+
+<section class="card" id="algo-params">
+  <h2>算法专属参数（lora_type 分支字段）</h2>
+  <p class="lead">选定 lora_type 后，表单会出现该算法的专属字段。此处逐项讲<b>作用</b>与<b>效果</b>；各算法的原理与选型对比见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a>。</p>
+
+  <h3>通用结构项（LoKr / GLoKR / BoKR / GSoKR 等 LyCORIS 系共享）</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>参数</th><th>作用</th><th>效果与建议</th></tr>
+    <tr><td><code>lokr_factor</code></td><td>Kronecker 分解因子：决定权重矩阵被切成两块小因子的形状。-1 = 最均衡分解</td><td>均衡分解参数量<b>最少</b>、风格最"整体"；指定更小的因子会让参数量二次膨胀，容量变大但更易过拟合。LoKr 系的容量主要靠它（和满矩阵阈值），不靠 network_dim</td></tr>
+    <tr><td><code>use_scalar</code></td><td>用可学习的全局缩放（0.01 起步）替代"B 矩阵零初始化"</td><td>起步更平缓：前期更新几乎不动、随后自适应放大。更稳，但收敛稍慢；常规训练保持关</td></tr>
+    <tr><td><code>decompose_both</code></td><td>对 w1 也做低秩分解（默认只分解 w2）</td><td>参数更省、容量下降；一般保持关。注意关着时 w1 恒为满矩阵——这正是 dim 阈值失效的一半原因</td></tr>
+    <tr><td><code>full_matrix</code></td><td>放弃低秩分解，直接训练完整增量矩阵</td><td>容量与风险同时拉满：文件大、显存高、极易过拟合。启动时系统会附加稳定性护栏，非实验勿开</td></tr>
+    <tr><td><code>dora_wd</code></td><td>DoRA 权重解耦：把更新拆成"方向"与"幅度"分开学习</td><td>低 rank 下表达力更好、幅度控制更稳。与 bypass_mode 互斥。在 BoKR / BoRA 分支里，这个开关就是 <b>BoRA 双向解耦的总开关</b>（关闭即退化为普通 LoKr / LoRA）</td></tr>
+    <tr><td><code>bypass_mode</code></td><td>旁路前向：不重建完整权重矩阵，改用等价的小矩阵链乘</td><td>显存友好，量化底模 / 小 batch 首选；与 DoRA/BoRA 解耦互斥。LyCORIS 系的 <code>dropout</code> 只在此模式下生效</td></tr>
+    <tr><td><code>use_cp</code></td><td>卷积核 CP 再分解</td><td>Anima 只训练 Linear 层，基本用不上</td></tr>
+    <tr><td><code>rank_dropout</code> / <code>module_dropout</code></td><td>训练时按 rank 维度 / 按整个模块随机失活</td><td>抗过拟合正则。画风训练一般全 0；<code>rank_dropout_scale</code> 是失活后的幅度补偿</td></tr>
+  </table>
+  </div>
+
+  <h3>GLoKR 专属</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>参数</th><th>作用</th><th>效果与建议</th></tr>
+    <tr><td><code>train_gates</code></td><td>每条路径（增量 B 路 / 滤镜 A 路 / 混色 C 路）挂一个可学习门控 + Kronecker 项混合系数</td><td>各层自动调"增量 vs 滤镜"的配比，免手工调权重。默认开，画风训练建议保持</td></tr>
+    <tr><td><code>init_mode</code></td><td>初始化方式：nkp = Van Loan 最近 Kronecker 积对齐初始化；kaiming = 经典随机</td><td>nkp 让梯度第一步就落进有意义的子空间（PiSSA 思路的 Kron 移植），短周期训练收敛明显更快，推荐</td></tr>
+    <tr><td><code>use_g_out</code></td><td>输出侧 C·W₀ 路径（每层约 6k 参数）</td><td>色调 / 氛围类全局风格增强。属消融项：建议同一数据集开 / 关各跑一轮对照再定</td></tr>
+    <tr><td><code>g_norm_mode</code></td><td>G 路径尺度对齐所用的范数</td><td>frobenius 稳妥（默认）；spectral 可让各层的有效学习率更均匀，深层学不动时可试</td></tr>
+  </table>
+  </div>
+
+  <h3>其他算法专属速查</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>算法</th><th>参数</th><th>作用与效果</th></tr>
+    <tr><td>T-LoRA</td><td><code>tlora_min_rank</code> / <code>tlora_rank_schedule</code> / <code>tlora_orthogonal_init</code></td><td>高噪声时间步的最低有效秩（防大结构学不动，建议 ≥ dim/8）／rank 随时间步的调度曲线（cosine 平滑推荐、linear 激进）／对 down 矩阵正交初始化加速收敛（默认开）</td></tr>
+    <tr><td>CDKA</td><td><code>cdka_r1</code> / <code>cdka_r2</code> / <code>cdka_r</code> / <code>cdka_alpha</code></td><td>容量全由前三者决定（论文原则：r₁ 小 2~4、r₂ 大、r 中等 2~8）；α 经 λ=α/√(r·r₂) 做稳定化缩放，换形状不用重调学习率</td></tr>
+    <tr><td>GSoKR</td><td><code>use_sora</code> / <code>sora_r</code> / <code>sora_epsilon</code></td><td>SoRA 稀疏门控总开关（关闭退化为 GLoKR 基础形态）／门控 rank 数／数值稳定项，一般不动</td></tr>
+    <tr><td>GLoRA-BOFT</td><td><code>boft_constraint</code> / <code>boft_rescaled</code></td><td>COFT 正交约束半径：限制旋转幅度、结构保持更强（0=不启用）／给正交旋转附加可学习缩放</td></tr>
+    <tr><td>DeLoRA</td><td><code>delora_lambda</code></td><td>更新强度 λ，<b>真正的缩放旋钮</b>（network_alpha 对它无效）；越大适配越强，默认 15</td></tr>
+    <tr><td>WaveFT</td><td><code>waveft_n_frequency</code> / <code>waveft_scaling</code> / <code>waveft_random_loc_seed</code> / <code>waveft_use_idwt</code></td><td>可训练频率数 = 容量（覆盖 network_dim）／重建后 ΔW 的真缩放（alpha 无效）／频率位置的确定性种子／Haar 逆小波重建开关</td></tr>
+    <tr><td>DEFT</td><td><code>deft_decomposition_method</code> / <code>deft_alpha</code> / <code>deft_init_weights</code> / <code>deft_init_scale</code></td><td>投影方式（qr 正交 / relu 非正交）／注入项缩放（0 表示 1，真缩放，network_alpha 无效）／零扰动起步（第 0 步输出=底模）／关闭零扰动时的随机幅度</td></tr>
+    <tr><td>MoSLoRA</td><td><code>moslora_mixer_init</code></td><td>rank×rank 混合矩阵的初始化：kaiming 对齐论文、identity 从标准 LoRA 子空间起步、orthogonal 保持混合能量</td></tr>
+    <tr><td>LoRA+</td><td><code>loraplus_lr_ratio</code> 等</td><td>up 矩阵用更高学习率（论文建议 16 倍量级），加速收敛且产物仍是标准 LoRA</td></tr>
+    <tr><td>PiSSA（lora 分支）</td><td><code>pissa_init</code> / <code>pissa_niter</code> 等</td><td>用底模权重的 SVD 主成分初始化 A/B，第一步就在主子空间上学，短周期收敛快；导出时可转标准 LoRA</td></tr>
+    <tr><td>VeRA</td><td><code>vera_projection_seed</code> / <code>vera_save_projection</code> / <code>vera_d_initial</code></td><td>共享冻结随机投影的种子（可由种子重建，不必存投影）／是否把投影写进存档／缩放向量 d 的初值</td></tr>
+    <tr><td>rsLoRA</td><td><code>rs_lora</code>（分支内置）</td><td>缩放从 α/rank 改为 α/√rank：高 rank 时更新不再被过度稀释，rank≥32 值得开</td></tr>
+  </table>
+  </div>
+  <div class="tip">这些字段只在对应 lora_type 分支下出现并生效；跨算法残留的旧值会在提交时被后端清理，不会串味。</div>
 </section>
 
 <section class="card" id="preview">

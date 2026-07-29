@@ -87,6 +87,58 @@ class TrainMonitorStatusTests(unittest.TestCase):
         lines = ["python vendor/sd-scripts/anima_train_network.py --config_file x.toml"]
         self.assertEqual(server.infer_model_type(lines), "Anima LoRA")
 
+    def test_estimate_training_steps_accounts_for_arb_buckets(self):
+        # 9 张方图 + 9 张宽图,BS8:朴素估算 ceil(18/8)=3 步/轮;
+        # ARB 分桶后各桶单独取整 = 2+2 = 4 步/轮
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as td:
+            subset = Path(td) / "1_a"
+            subset.mkdir()
+            for i in range(9):
+                Image.new("RGB", (64, 64)).save(subset / f"sq_{i}.png")
+                Image.new("RGB", (128, 64)).save(subset / f"wide_{i}.png")
+            config = {
+                "train_data_dir": td,
+                "enable_bucket": "true",
+                "train_batch_size": "8",
+                "max_train_epochs": "10",
+                "resolution": "1024,1024",
+            }
+            server._BUCKET_ESTIMATE_CACHE.clear()
+            est = server.estimate_training_steps(config)
+            self.assertEqual(est["steps_per_epoch"], 4)
+            self.assertEqual(est["total_steps"], 40)
+            self.assertEqual(est["bucket_count"], 2)
+            self.assertEqual(est["bucket_compare"], "理论30 → 实际40")
+            self.assertIn("ARB 2桶", est["detail"])
+
+            # 不开桶时保持朴素估算
+            config["enable_bucket"] = "false"
+            est_plain = server.estimate_training_steps(config)
+            self.assertEqual(est_plain["steps_per_epoch"], 3)
+            self.assertNotIn("bucket_compare", est_plain)
+
+    def test_infer_adapter_type_distinguishes_local_algos(self):
+        # 回归：GLoKRModule 含子串 lokrmodule，曾被误报为 LoKr
+        cases = {
+            "module type table: {'glokrmodule': 4}": "GLoKR",
+            "module type table: {'glokrsoramodule': 4}": "GSoKR",
+            "module type table: {'bokrmodule': 4}": "BoKR",
+            "module type table: {'boramodule': 4}": "BoRA",
+            "module type table: {'cdkamodule': 4}": "CDKA",
+            "module type table: {'lokrmodule': 4}": "LoKr",
+            'lora_type = "glokr"': "GLoKR",
+            'lora_type = "cdka"': "CDKA",
+            'lora_type = "glora_boft"': "GLoRA-BOFT",
+            'network_args = ["algo=gsokr"]': "GSoKR",
+            'lora_type = "rslora"': "rsLoRA",
+            'lora_type = "delora"': "DeLoRA",
+            'network_module = "lycoris.kohya"': "LyCORIS",
+        }
+        for source, expected in cases.items():
+            self.assertEqual(server._infer_adapter_type(source), expected, source)
+
     def test_anima_fast_progress_jsonl_overrides_stdout_metrics(self):
         with tempfile.TemporaryDirectory() as td:
             progress = Path(td) / "progress.jsonl"
