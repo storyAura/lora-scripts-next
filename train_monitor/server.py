@@ -771,6 +771,7 @@ def estimate_training_steps(config: dict, engine: str = "kohya", runtime_metrics
         if not runtime_total:
             estimate["total_steps"] = epochs * steps_per_epoch
         if bucket_est:
+            estimate["naive_total_steps"] = epochs * naive_steps_per_epoch
             estimate["bucket_compare"] = (
                 f"理论{epochs * naive_steps_per_epoch} → 实际{epochs * steps_per_epoch}"
             )
@@ -801,7 +802,14 @@ def _extract_train_params(config: dict, engine: str | None = None, runtime_metri
     step_estimate = estimate_training_steps(config, engine=engine, runtime_metrics=runtime_metrics)
     step_label = "总步数"
     if step_estimate.get("runtime_total") and step_estimate.get("total_steps"):
-        params.append({"label": step_label, "value": f"{step_estimate['total_steps']}（训练器实时）"})
+        # 训练器实时接管后仍显示分桶信息:理论 = 不分桶估算,实际 = 训练器真实总步数
+        value = f"{step_estimate['total_steps']}（训练器实时"
+        if step_estimate.get("bucket_count") and step_estimate.get("naive_total_steps"):
+            value += (
+                f" · ARB {step_estimate['bucket_count']}桶"
+                f" · 理论{step_estimate['naive_total_steps']} → 实际{step_estimate['total_steps']}"
+            )
+        params.append({"label": step_label, "value": value + "）"})
     elif step_estimate.get("total_steps") and step_estimate.get("epochs"):
         compare = step_estimate.get("bucket_compare", "")
         value = f"{step_estimate['total_steps']}（{step_estimate.get('detail', '')} × {step_estimate['epochs']}ep"

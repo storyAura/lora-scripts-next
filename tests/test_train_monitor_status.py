@@ -119,6 +119,17 @@ class TrainMonitorStatusTests(unittest.TestCase):
             self.assertEqual(est_plain["steps_per_epoch"], 3)
             self.assertNotIn("bucket_compare", est_plain)
 
+            # 训练器实时接管后,总步数小字仍要带桶数与理论/实际
+            config["enable_bucket"] = "true"
+            server._BUCKET_ESTIMATE_CACHE.clear()
+            params = server._extract_train_params(
+                config, runtime_metrics={"total_steps": "660"}
+            )
+            steps_value = next(p["value"] for p in params if p["label"] == "总步数")
+            self.assertIn("训练器实时", steps_value)
+            self.assertIn("ARB 2桶", steps_value)
+            self.assertIn("理论30 → 实际660", steps_value)
+
     def test_infer_adapter_type_distinguishes_local_algos(self):
         # 回归：GLoKRModule 含子串 lokrmodule，曾被误报为 LoKr
         cases = {
