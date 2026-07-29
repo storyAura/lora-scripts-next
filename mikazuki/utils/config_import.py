@@ -479,7 +479,7 @@ ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
     "tlora": {"network_module": "networks.tlora_anima"},
     "loha": {"network_module": "networks.loha"},
     "lokr": {"network_module": "lycoris.kohya", "lycoris_algo": "lokr"},
-    "cdka": {"network_module": "lycoris.kohya", "lycoris_algo": "cdka"},
+    "cdka": {"network_module": "networks.cdka_anima"},
     "bokr": {"network_module": "lycoris.kohya", "lycoris_algo": "bokr"},
     "bora": {"network_module": "lycoris.kohya", "lycoris_algo": "bora"},
     "gsokr": {"network_module": "lycoris.kohya", "lycoris_algo": "gsokr"},
@@ -497,6 +497,7 @@ _ANIMA_NETWORK_MODULE_TO_LORA_TYPE = {
     "networks.deft_anima": "deft",
     "networks.moslora_anima": "moslora",
     "networks.tlora_anima": "tlora",
+    "networks.cdka_anima": "cdka",
     "networks.loha": "loha",
 }
 
@@ -541,6 +542,16 @@ _ANIMA_NETWORK_ARG_TO_UI: dict[str, dict[str, str]] = {
         "tlora_rank_schedule": "tlora_rank_schedule",
         "tlora_orthogonal_init": "tlora_orthogonal_init",
     },
+    "networks.cdka_anima": {
+        "cdka_r1": "cdka_r1",
+        "cdka_r2": "cdka_r2",
+        "cdka_r": "cdka_r",
+        "cdka_alpha": "cdka_alpha",
+        "bypass_mode": "bypass_mode",
+        "rank_dropout": "rank_dropout",
+        "module_dropout": "module_dropout",
+        "rank_dropout_scale": "rank_dropout_scale",
+    },
 }
 
 _ANIMA_BOOL_UI_FIELDS = frozenset({
@@ -550,6 +561,8 @@ _ANIMA_BOOL_UI_FIELDS = frozenset({
     "waveft_use_idwt",
     "deft_init_weights",
     "tlora_orthogonal_init",
+    "bypass_mode",
+    "rank_dropout_scale",
 })
 
 

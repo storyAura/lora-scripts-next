@@ -240,9 +240,11 @@ class LoraTypePipelineTests(unittest.TestCase):
         self.assertFalse(hasattr(m0, "bora_scale_r"), "BoRA scales must not exist")
 
     def test_cdka_paper_defaults_reach_module(self):
+        # CDKA is a standalone networks.* module (2026-07-29): lora_type alone
+        # must route to networks.cdka_anima, never to lycoris.
         m0 = self._assert_pipeline(
             {
-                "network_module": "lycoris.kohya", "lycoris_algo": "cdka",
+                "lora_type": "cdka",
                 "cdka_r1": 2, "cdka_r2": 8, "cdka_r": 4, "cdka_alpha": 16,
             },
             "CDKAModule",
@@ -256,7 +258,7 @@ class LoraTypePipelineTests(unittest.TestCase):
 
     def test_cdka_bypass_path_matches_weight_rebuild(self):
         _, _, loras = _build({
-            "network_module": "lycoris.kohya", "lycoris_algo": "cdka",
+            "lora_type": "cdka",
             "bypass_mode": True,
         })
         m0 = loras[0]
@@ -271,7 +273,7 @@ class LoraTypePipelineTests(unittest.TestCase):
     def test_cdka_r1_r2_fall_back_to_divisors(self):
         # DIM=16 不能被 r₂=6 整除 → 退到最大整除数 4；r₁=3 → 退到 2
         _, _, loras = _build({
-            "network_module": "lycoris.kohya", "lycoris_algo": "cdka",
+            "lora_type": "cdka",
             "cdka_r1": 3, "cdka_r2": 6, "cdka_r": 2,
         })
         m0 = loras[0]

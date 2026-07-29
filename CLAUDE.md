@@ -200,6 +200,14 @@ runs the sync after installing requirements; for manual venv work run
 installed copy drifts from the vendored one, and the trainer refuses lycoris.kohya runs on an
 unsynced venv. Never edit only the venv copy. Details in `vendor/lycoris/VENDOR.md`.
 
+**Algorithm placement rule (2026-07-29, user decree):** new algorithms — paper-based or
+experimental — are standalone `vendor/sd-scripts/networks/*_anima.py` modules (clone the
+`moslora_anima.py` scaffolding: `_network_factory`/`_module_class` hooks over `lora_anima`,
+branch fields forwarded via `ANIMA_NETWORK_MODULE_ARG_FIELDS` in the adapter).
+`vendor/lycoris` is **frozen**: no new algorithms go in, ever; it only keeps what it already
+ships. Precedent: CDKA moved to `networks/cdka_anima.py` (same archive keys; the lycoris copy
+stays untouched for legacy `algo=cdka` configs, `networks.cdka_anima` is canonical).
+
 ### Frontend: patch the build output
 
 There is no frontend build in this repo. UI changes are string patches against

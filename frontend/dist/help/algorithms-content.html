@@ -383,7 +383,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <li>常用参数都已可视化；「自定义 network_args」仅用于极少数未上界面的进阶项（如 <code>wd_on_output=False</code>、<code>rs_lora=True</code>、<code>preset=xxx.toml</code>）。</li>
     <li><b>界面字段优先</b>：同名参数同时出现在界面与自定义框时，以界面显示的值为准（所见即所得）。</li>
     <li>本地扩展算法仅作用于 Linear 层，Conv / Norm 层自动跳过，属预期行为，日志中的 skip 提示无需理会。</li>
-    <li>训练模块归属：<code>lora / rslora / lora_plus / dora / tlora / lora_fa / vera / delora / waveft / deft / moslora</code> 走内置 networks 实现；<code>lokr / cdka / bokr / bora / gsokr / glora_boft / loha</code> 走 <code>lycoris.kohya</code>，系统会自动注入 Anima 专用 preset（声明可训练模块），无需手动配置。</li>
+    <li>训练模块归属：<code>lora / rslora / lora_plus / dora / tlora / lora_fa / vera / delora / waveft / deft / moslora / cdka / loha</code> 走内置 networks 实现；<code>lokr / bokr / bora / gsokr / glora_boft</code> 走 <code>lycoris.kohya</code>，系统会自动注入 Anima 专用 preset（声明可训练模块），无需手动配置。</li>
   </ul>
 </section>
 

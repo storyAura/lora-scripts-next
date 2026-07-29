@@ -180,8 +180,8 @@ Schema.intersect([
             }),
             Schema.object({
                 lora_type: Schema.const("cdka").required(),
-                network_module: Schema.string().default("lycoris.kohya").hidden(),
-                lycoris_algo: Schema.string().default("cdka").hidden(),
+                network_module: Schema.string().default("networks.cdka_anima").hidden(),
+                lycoris_algo: Schema.string().hidden(),
                 cdka_r1: Schema.number().min(1).step(1).default(2).description("分量形状 r₁（B 的列块数）。论文原则：保持小（2~4），增大反而伤性能"),
                 cdka_r2: Schema.number().min(1).step(1).default(8).description("分量形状 r₂（A 的行块数）。论文原则：一致地越大越好，预算允许时优先加它"),
                 cdka_r: Schema.number().min(1).step(1).default(4).description("Kronecker 分量个数 r（求和项数）。经验最优 2~8，加过头会倒退"),
@@ -190,10 +190,10 @@ Schema.intersect([
                 rank_dropout: Schema.number().step(0.01).min(0).max(1).description("rank dropout 概率。画风训练建议 0"),
                 module_dropout: Schema.number().step(0.01).min(0).max(1).description("module dropout 概率"),
                 rank_dropout_scale: Schema.boolean().default(false).description("对 rank dropout 进行缩放补偿"),
-                dropout: Schema.number().step(0.01).min(0).max(1).description("Dropout 概率（仅 bypass 模式生效）"),
+                network_dropout: Schema.number().step(0.01).min(0).max(1).default(0).description("Dropout 概率（仅 bypass 模式生效）"),
                 pissa_init: Schema.boolean().hidden(),
                 lokr_factor: Schema.number().hidden(),
-                network_dropout: Schema.number().hidden(),
+                dropout: Schema.number().hidden(),
             }),
             Schema.object({
                 lora_type: Schema.const("bokr").required(),

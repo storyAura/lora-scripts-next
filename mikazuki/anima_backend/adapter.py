@@ -274,6 +274,20 @@ MOSLORA_NETWORK_ARG_FIELDS = {
     "moslora_mixer_init",
 }
 
+# CDKA is a standalone networks.* module (never lycoris — the vendored tree is
+# frozen); its branch fields travel as module network_args like every other
+# standalone algorithm.
+CDKA_NETWORK_ARG_FIELDS = {
+    "cdka_r1",
+    "cdka_r2",
+    "cdka_r",
+    "cdka_alpha",
+    "bypass_mode",
+    "rank_dropout",
+    "module_dropout",
+    "rank_dropout_scale",
+}
+
 ANIMA_NETWORK_MODULE_ARG_FIELDS = {
     "networks.lora_anima": (
         STANDARD_LORA_NETWORK_ARG_FIELDS | PISSA_NETWORK_ARG_FIELDS
@@ -283,6 +297,7 @@ ANIMA_NETWORK_MODULE_ARG_FIELDS = {
     "networks.waveft_anima": WAVEFT_NETWORK_ARG_FIELDS,
     "networks.deft_anima": DEFT_NETWORK_ARG_FIELDS,
     "networks.moslora_anima": MOSLORA_NETWORK_ARG_FIELDS,
+    "networks.cdka_anima": CDKA_NETWORK_ARG_FIELDS,
 }
 
 EXPLICIT_BOOLEAN_NETWORK_ARG_FIELDS = {
@@ -319,10 +334,6 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     "sora_epsilon": "sora_epsilon",
     "boft_constraint": "constraint",
     "boft_rescaled": "rescaled",
-    "cdka_r1": "cdka_r1",
-    "cdka_r2": "cdka_r2",
-    "cdka_r": "cdka_r",
-    "cdka_alpha": "cdka_alpha",
 }
 
 LOKR_TRAIN_NORM_WARNING = (
@@ -619,6 +630,7 @@ def adapt_anima_config(
             or key in WAVEFT_NETWORK_ARG_FIELDS
             or key in DEFT_NETWORK_ARG_FIELDS
             or key in MOSLORA_NETWORK_ARG_FIELDS
+            or key in CDKA_NETWORK_ARG_FIELDS
             or key in LYCORIS_NETWORK_ARG_MAP
         ):
             continue
