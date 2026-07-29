@@ -369,7 +369,8 @@ function renderTrainParams(status) {
   }
   var lr = metrics.lr;
   if (!lr) {
-    var lrParam = params.find(function(p) { return p.label === '学习率' || p.label === 'UNet LR'; });
+    // 服务端在仅训 DiT 模式下会输出 "学习率 (DiT)" 这类带后缀的标签，按前缀匹配
+    var lrParam = params.find(function(p) { return p.label.indexOf('学习率') === 0 || p.label === 'UNet LR'; });
     if (lrParam) lr = lrParam.value;
   }
   if (lr) summaryItems.push({label: '学习率', value: lr});
