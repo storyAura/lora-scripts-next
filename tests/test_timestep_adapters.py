@@ -134,9 +134,10 @@ class LycorisMappingSymmetryTests(unittest.TestCase):
 
 
 class AdapterForwardingTests(unittest.TestCase):
-    def test_ui_fields_reach_glokr_module(self):
-        # kron_rank was removed from the UI (2026-07-29): a stale value must be
-        # dropped while remaining fields (g_norm_mode) are still forwarded.
+    def test_stale_glokr_fields_dropped_but_custom_args_reach_module(self):
+        # GLoKR's UI branch was removed (2026-07-29): every branch field from a
+        # stale autosave must be dropped, while a legacy lycoris_algo=glokr
+        # config (no lora_type) still routes to the vendored module.
         adapted, _ = adapt_anima_config({
             "pretrained_model_name_or_path": "x.safetensors",
             "network_module": "lycoris.kohya",
@@ -147,11 +148,12 @@ class AdapterForwardingTests(unittest.TestCase):
         })
         args = {item.split("=", 1)[0]: item.split("=", 1)[1] for item in adapted["network_args"]}
         self.assertIsNone(args.get("kron_rank"))
-        self.assertEqual(args.get("g_norm_mode"), "spectral")
+        self.assertIsNone(args.get("g_norm_mode"))
+        self.assertEqual(args.get("algo"), "glokr")
 
         # Direct network_args (the custom-args power-user channel) still reach
         # the vendored module: _build_glokr's base kwargs carry kron_rank=2.
-        net, _ = _build_glokr({"g_norm_mode": args["g_norm_mode"]})
+        net, _ = _build_glokr({"g_norm_mode": "spectral"})
         m0 = net.unet_loras[0]
         self.assertEqual(m0.kron_rank, 2)
 

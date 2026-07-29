@@ -259,9 +259,11 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 - Blocks run the AdaLN modulation inside `torch.autocast(..., enabled=use_fp32)`, which
   **disables** autocast on the bf16 path — tensors reaching it must already match the weight
   dtype. Changing timestep dtypes upstream has bitten this before.
-- GLoKR defaults to merged mode, which reconstructs the full ΔW per module per step —
-  heavy on VRAM. `bypass_mode=True` avoids it but is mutually exclusive with
-  `use_bora`/`dora_wd`. `vendor/lycoris/GLOKR.md` has the full parameter reference.
+- GLoKR was removed from the GUI on 2026-07-29 (`lora_type=glokr` is rejected pre-launch;
+  the vendored module stays for legacy archives and custom network_args). Where it still
+  runs, its trap remains: merged mode reconstructs the full ΔW per module per step — heavy
+  on VRAM; `bypass_mode=True` avoids it but is mutually exclusive with `use_bora`/`dora_wd`.
+  `vendor/lycoris/GLOKR.md` has the full parameter reference.
 - For LoKr-family algos `network_dim` is only a threshold ("stop decomposing the Kronecker
   factors"), not a capacity dial — huge values are idiomatic. Capacity comes from `factor`
   (`-1` = balanced = *fewest* parameters; smaller values inflate them quadratically) and, for

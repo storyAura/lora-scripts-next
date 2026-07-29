@@ -262,7 +262,6 @@ class AnimaLoraTypeBranchConstTests(unittest.TestCase):
         "tlora": ("networks.tlora_anima", None),
         "loha": ("networks.loha", None),
         "lokr": ("lycoris.kohya", "lokr"),
-        "glokr": ("lycoris.kohya", "glokr"),
         "bokr": ("lycoris.kohya", "bokr"),
         "bora": ("lycoris.kohya", "bora"),
         "gsokr": ("lycoris.kohya", "gsokr"),

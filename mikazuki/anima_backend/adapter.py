@@ -192,10 +192,6 @@ NETWORK_ONLY_FIELDS = {
     "enable_base_weight",
     "base_weights",
     "base_weights_multiplier",
-    "train_gates",
-    "init_mode",
-    "use_g_out",
-    "g_norm_mode",
     "use_sora",
     "sora_r",
     "sora_epsilon",
@@ -315,13 +311,9 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     "rank_dropout_scale": "rank_dropout_scale",
     "train_norm": "train_norm",
     "dropout": "dropout",
-    # 本地扩展算法专属字段（glokr / gsokr / glora_boft）。
+    # 本地扩展算法专属字段（gsokr / glora_boft）。
     # 布尔字段的 UI 默认值只允许 lycoris 侧默认为 False 的参数设为 true，
     # 因为 _is_empty_value 会把 False 丢弃（不发送 = lycoris 默认值）。
-    "train_gates": "train_gates",
-    "init_mode": "init_mode",
-    "use_g_out": "use_g_out",
-    "g_norm_mode": "g_norm_mode",
     "use_sora": "use_sora",
     "sora_r": "sora_r",
     "sora_epsilon": "sora_epsilon",
@@ -514,6 +506,15 @@ def adapt_anima_config(
     source.pop("kron_rank", None)
     source.pop("use_bora", None)
     source.pop("bora_iters", None)
+
+    # GLoKR removed from the GUI (2026-07-29; the vendored module remains for
+    # CLI / legacy archives): its branch-exclusive fields from old
+    # autosaves/history are dropped silently instead of leaking into
+    # network_args or "unknown field" warnings
+    source.pop("train_gates", None)
+    source.pop("init_mode", None)
+    source.pop("use_g_out", None)
+    source.pop("g_norm_mode", None)
 
     if finetune:
         for key in list(source):

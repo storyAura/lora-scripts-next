@@ -221,10 +221,11 @@ class LoraTypePipelineTests(unittest.TestCase):
             "LokrModule",
         )
 
-    def test_glokr_recommended_defaults_reach_module(self):
-        # kron_rank / use_bora / bora_iters were removed from the UI (2026-07-29);
-        # stale values from old autosaves must be dropped so the module falls
-        # back to the classic single-term, no-BoRA form.
+    def test_glokr_legacy_algo_builds_with_vendor_defaults(self):
+        # GLoKR was removed from the GUI (2026-07-29): every branch field from a
+        # stale autosave is dropped, so a legacy lycoris_algo=glokr config (no
+        # lora_type) builds the vendored module with pure vendor defaults
+        # (single-term, no BoRA, no gates).
         m0 = self._assert_pipeline(
             {
                 "network_module": "lycoris.kohya", "lycoris_algo": "glokr",
@@ -235,7 +236,7 @@ class LoraTypePipelineTests(unittest.TestCase):
         )
         self.assertFalse(m0.wd, "stale use_bora must be dropped, not forwarded")
         self.assertEqual(int(m0.kron_rank), 1)
-        self.assertTrue(hasattr(m0, "gate_b"), "train_gates should create gate params")
+        self.assertFalse(hasattr(m0, "gate_b"), "stale train_gates must be dropped")
         self.assertFalse(hasattr(m0, "bora_scale_r"), "BoRA scales must not exist")
 
     def test_cdka_paper_defaults_reach_module(self):

@@ -419,12 +419,8 @@ _LYCORIS_NETWORK_ARG_TO_UI: dict[str, str] = {
     "module_dropout": "module_dropout",
     "rank_dropout_scale": "rank_dropout_scale",
     "train_norm": "train_norm",
-    # Local extension algos (glokr / gsokr / glora_boft) — keep in sync
+    # Local extension algos (gsokr / glora_boft) — keep in sync
     # with LYCORIS_NETWORK_ARG_MAP in mikazuki/anima_backend/adapter.py.
-    "train_gates": "train_gates",
-    "init_mode": "init_mode",
-    "use_g_out": "use_g_out",
-    "g_norm_mode": "g_norm_mode",
     "use_sora": "use_sora",
     "sora_r": "sora_r",
     "sora_epsilon": "sora_epsilon",
@@ -446,8 +442,6 @@ _LYCORIS_BOOL_UI_FIELDS = frozenset({
     "full_matrix",
     "rank_dropout_scale",
     "train_norm",
-    "train_gates",
-    "use_g_out",
     "use_sora",
     "boft_rescaled",
 })
@@ -485,7 +479,6 @@ ANIMA_LORA_TYPE_BRANCH_CONSTS: dict[str, dict[str, str]] = {
     "tlora": {"network_module": "networks.tlora_anima"},
     "loha": {"network_module": "networks.loha"},
     "lokr": {"network_module": "lycoris.kohya", "lycoris_algo": "lokr"},
-    "glokr": {"network_module": "lycoris.kohya", "lycoris_algo": "glokr"},
     "cdka": {"network_module": "lycoris.kohya", "lycoris_algo": "cdka"},
     "bokr": {"network_module": "lycoris.kohya", "lycoris_algo": "bokr"},
     "bora": {"network_module": "lycoris.kohya", "lycoris_algo": "bora"},

@@ -123,7 +123,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>resolution</code></td><td>Anima 默认 <code>1024,1024</code></td><td>与底模训练分辨率一致效果最好</td></tr>
     <tr><td><code>max_train_epochs</code></td><td>10 起步</td><td>配合每 2 epoch 保存 + 预览图挑最佳轮次</td></tr>
     <tr><td><code>output_name</code></td><td>起个认得出的名字</td><td>不然 output 目录里全是 aki.safetensors</td></tr>
-    <tr><td><code>lora_type</code></td><td>常规选 LoRA；画风可试 GLoKR</td><td>见<a class="back-link" href="/help/algorithms-content.html">算法说明</a></td></tr>
+    <tr><td><code>lora_type</code></td><td>常规选 LoRA；画风可试 LoKr</td><td>见<a class="back-link" href="/help/algorithms-content.html">算法说明</a></td></tr>
     <tr><td><code>network_dim / alpha</code></td><td>16 / 16 起步</td><td>不是越大越好，先小后大</td></tr>
     <tr><td><code>enable_preview</code></td><td>建议开</td><td>每 2 epoch 出一张图，肉眼看进度</td></tr>
   </table>
@@ -219,7 +219,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>参数</th><th>默认</th><th>说明</th></tr>
     <tr><td><code>learning_rate</code></td><td>1e-4</td><td>总学习率。分开设置下面两项后此值失效</td></tr>
-    <tr><td><code>unet_lr</code></td><td>1e-4</td><td>DiT 主体学习率（名字沿用 U-Net 时代，Anima 里指 DiT）。LoRA 常用 1e-4；LoKr/GLoKR 系可到 5e-4~1e-3 量级，配合预览图调</td></tr>
+    <tr><td><code>unet_lr</code></td><td>1e-4</td><td>DiT 主体学习率（名字沿用 U-Net 时代，Anima 里指 DiT）。LoRA 常用 1e-4；LoKr 系可到 5e-4~1e-3 量级，配合预览图调</td></tr>
     <tr><td><code>text_encoder_lr</code></td><td>1e-5</td><td>Qwen3 文本编码器学习率。默认只训 DiT（unet_only 开启），此项通常<b>不生效</b></td></tr>
     <tr><td><code>lr_scheduler</code></td><td>cosine_with_restarts</td><td>学习率曲线：cosine 系"先高后低"最常用；constant 全程恒定（自适应优化器如 Prodigy 要配 constant）；带 warmup 的先爬坡再下降。重启次数 <code>lr_scheduler_num_cycles</code> 建议 ≤ 4</td></tr>
     <tr><td><code>lr_warmup_steps</code></td><td>0</td><td>预热步数：从 0 缓慢升到目标学习率，避免开局步子太大。若启用建议约占总步数 5%</td></tr>
@@ -263,7 +263,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>参数</th><th>默认</th><th>说明</th></tr>
     <tr><td><code>network_weights</code></td><td>空</td><td>从已有 LoRA / LoKr 继续训练（只加载网络权重，不含优化器状态；完整断点续训用 save_state + resume）</td></tr>
-    <tr><td><code>network_dim</code></td><td>16</td><td>网络维度（rank），"补丁的表达力"。常用 4~128，<b>不是越大越好</b>：太大易过拟合且文件大。Anima LoRA 16 起步；T-LoRA 建议 32；GLoKR 可开 32~64（参数量本身很小）。<b>并非对所有算法都有效</b>，见下方「dim / alpha 有效性对照」</td></tr>
+    <tr><td><code>network_dim</code></td><td>16</td><td>网络维度（rank），"补丁的表达力"。常用 4~128，<b>不是越大越好</b>：太大易过拟合且文件大。Anima LoRA 16 起步；T-LoRA 建议 32。<b>并非对所有算法都有效</b>，见下方「dim / alpha 有效性对照」</td></tr>
     <tr><td><code>network_alpha</code></td><td>16</td><td>缩放分子，实际缩放 = alpha ÷ dim。常用：等于 dim、dim/2 或 1。改 alpha 等效改学习率量级。<b>并非对所有算法都有效</b>，见下方对照表</td></tr>
     <tr><td><code>base_model_quantization</code></td><td>none</td><td>冻结基座量化：none / int8 / nf4。当前允许 LoRA、LoRA+、LoRA-FA、VeRA，并要求 CUDA + bitsandbytes；rsLoRA、PiSSA、DoRA、LyCORIS 与其他实验算法会在启动前明确拒绝</td></tr>
     <tr><td><code>anima_gradient_checkpointing_mode</code></td><td>standard</td><td>设为 selective 后只缓存矩阵乘法与 SDPA 等高成本算子，减少完整 block 重算；必须同时开启 gradient_checkpointing，且不能与 CPU offload 或 block swap 组合</td></tr>
@@ -281,7 +281,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>算法</th><th>network_dim</th><th>network_alpha</th></tr>
     <tr><td>LoRA / LoRA+ / rsLoRA / DoRA / LoHa / BoRA / MoSLoRA / T-LoRA / LoRA-FA / VeRA</td><td>✅ 真实秩</td><td>✅ 有效（rsLoRA 为 alpha÷√dim；T-LoRA 建议 alpha=dim）</td></tr>
-    <tr><td>LoKr / GLoKR / BoKR / GSoKR</td><td>⚠️ 仅是"是否继续分解"的<b>阈值</b>：低于阈值（3072 宽层约 32）时是真实秩，达到阈值即转满矩阵、继续加大无任何变化。大值是常态用法</td><td>⚠️ 满矩阵模式下被<b>静默丢弃</b>（强制 scale=1）。同一次训练里不同宽度的层可能一部分生效一部分不生效</td></tr>
+    <tr><td>LoKr / BoKR / GSoKR</td><td>⚠️ 仅是"是否继续分解"的<b>阈值</b>：低于阈值（3072 宽层约 32）时是真实秩，达到阈值即转满矩阵、继续加大无任何变化。大值是常态用法</td><td>⚠️ 满矩阵模式下被<b>静默丢弃</b>（强制 scale=1）。同一次训练里不同宽度的层可能一部分生效一部分不生效</td></tr>
     <tr><td>GLoRA+BOFT</td><td>⚠️ 双重身份：GLoRA 路径的真实秩 + BOFT 分块因子（参数量随 dim 非单调跳变）</td><td>⚠️ 只作用于 GLoRA 路径；BOFT 旋转由 boft_constraint 控制</td></tr>
     <tr><td>DeLoRA</td><td>✅ 真实秩（还参与范数归一）</td><td>❌ 无效，真正的缩放是 <code>delora_lambda</code></td></tr>
     <tr><td>WaveFT</td><td>⚠️ 等于频率数，但填了 <code>waveft_n_frequency</code> 时被其覆盖</td><td>❌ 无效，真正的缩放是 <code>waveft_scaling</code></td></tr>
@@ -289,15 +289,15 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td>CDKA</td><td>❌ 完全无效，容量 = <code>cdka_r1/r2/r</code></td><td>❌ 完全无效，缩放 = <code>cdka_alpha</code>/√(r·r₂)</td></tr>
   </table>
   </div>
-  <div class="tip warn">另注意：LyCORIS 系算法（LoKr/GLoKR/BoKR/BoRA/GSoKR/rsLoRA/DoRA/CDKA…）的 <code>dropout</code> 只在 <code>bypass_mode</code> 开启时生效，常规前向不应用（界面各字段已标注）。</div>
-  <div class="tip">lora_type（LoRA / LoKr / GLoKR / T-LoRA…）的算法区别与每种算法的专属参数，见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a>。</div>
+  <div class="tip warn">另注意：LyCORIS 系算法（LoKr/BoKR/BoRA/GSoKR/rsLoRA/DoRA/CDKA…）的 <code>dropout</code> 只在 <code>bypass_mode</code> 开启时生效，常规前向不应用（界面各字段已标注）。</div>
+  <div class="tip">lora_type（LoRA / LoKr / T-LoRA…）的算法区别与每种算法的专属参数，见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a>。</div>
 </section>
 
 <section class="card" id="algo-params">
   <h2>算法专属参数（lora_type 分支字段）</h2>
   <p class="lead">选定 lora_type 后，表单会出现该算法的专属字段。此处逐项讲<b>作用</b>与<b>效果</b>；各算法的原理与选型对比见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a>。</p>
 
-  <h3>通用结构项（LoKr / GLoKR / BoKR / GSoKR 等 LyCORIS 系共享）</h3>
+  <h3>通用结构项（LoKr / BoKR / GSoKR 等 LyCORIS 系共享）</h3>
   <div class="table-scroll">
   <table>
     <tr><th>参数</th><th>作用</th><th>效果与建议</th></tr>
@@ -309,17 +309,6 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>bypass_mode</code></td><td>旁路前向：不重建完整权重矩阵，改用等价的小矩阵链乘</td><td>显存友好，量化底模 / 小 batch 首选；与 DoRA/BoRA 解耦互斥。LyCORIS 系的 <code>dropout</code> 只在此模式下生效</td></tr>
     <tr><td><code>use_cp</code></td><td>卷积核 CP 再分解</td><td>Anima 只训练 Linear 层，基本用不上</td></tr>
     <tr><td><code>rank_dropout</code> / <code>module_dropout</code></td><td>训练时按 rank 维度 / 按整个模块随机失活</td><td>抗过拟合正则。画风训练一般全 0；<code>rank_dropout_scale</code> 是失活后的幅度补偿</td></tr>
-  </table>
-  </div>
-
-  <h3>GLoKR 专属</h3>
-  <div class="table-scroll">
-  <table>
-    <tr><th>参数</th><th>作用</th><th>效果与建议</th></tr>
-    <tr><td><code>train_gates</code></td><td>每条路径（增量 B 路 / 滤镜 A 路 / 混色 C 路）挂一个可学习门控 + Kronecker 项混合系数</td><td>各层自动调"增量 vs 滤镜"的配比，免手工调权重。默认开，画风训练建议保持</td></tr>
-    <tr><td><code>init_mode</code></td><td>初始化方式：nkp = Van Loan 最近 Kronecker 积对齐初始化；kaiming = 经典随机</td><td>nkp 让梯度第一步就落进有意义的子空间（PiSSA 思路的 Kron 移植），短周期训练收敛明显更快，推荐</td></tr>
-    <tr><td><code>use_g_out</code></td><td>输出侧 C·W₀ 路径（每层约 6k 参数）</td><td>色调 / 氛围类全局风格增强。属消融项：建议同一数据集开 / 关各跑一轮对照再定</td></tr>
-    <tr><td><code>g_norm_mode</code></td><td>G 路径尺度对齐所用的范数</td><td>frobenius 稳妥（默认）；spectral 可让各层的有效学习率更均匀，深层学不动时可试</td></tr>
   </table>
   </div>
 

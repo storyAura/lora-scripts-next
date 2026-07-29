@@ -5,9 +5,11 @@ from collections.abc import Mapping
 
 
 ANIMA_LORA_TRAIN_TYPES = frozenset({"anima-lora", "sd3-lora"})
-# "tglokr" (time-gated GLoKR) was removed; a stale saved config must fail loudly
-# instead of silently training plain GLoKR under the old name.
-UNIMPLEMENTED_ANIMA_ADAPTER_TYPES: frozenset[str] = frozenset({"tglokr"})
+# Removed algorithms: a stale saved config must fail loudly instead of silently
+# training something else. "tglokr" (time-gated GLoKR) removed 2026-07-28;
+# "glokr" removed from the GUI 2026-07-29 (the vendored module remains for
+# CLI / legacy-archive use, but the product no longer offers it).
+UNIMPLEMENTED_ANIMA_ADAPTER_TYPES: frozenset[str] = frozenset({"tglokr", "glokr"})
 
 
 class TrainingConfigurationError(ValueError):

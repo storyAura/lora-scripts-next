@@ -483,36 +483,39 @@ class AnimaBackendAdapterTests(unittest.TestCase):
                 found = v
         return found
 
-    def test_glokr_ui_fields_become_network_args(self):
-        adapted, _ = adapt_anima_config(
+    def test_stale_glokr_fields_dropped_after_removal(self):
+        # GLoKR was removed from the GUI (2026-07-29). Old autosaves still carry
+        # its branch fields; every one of them must be dropped silently instead
+        # of leaking into network_args or "unknown field" warnings.
+        adapted, warnings = adapt_anima_config(
             {
+                "lora_type": "lokr",
                 "network_module": "lycoris.kohya",
-                "lycoris_algo": "glokr",
+                "lycoris_algo": "lokr",
                 "kron_rank": 2,
                 "use_bora": True,
                 "bora_iters": 2,
                 "train_gates": True,
                 "init_mode": "nkp",
-                "use_g_out": False,
+                "use_g_out": True,
                 "g_norm_mode": "frobenius",
                 "lokr_factor": -1,
             }
         )
         args = adapted["network_args"]
 
-        self.assertEqual(self._arg_value(args, "algo"), "glokr")
-        # kron_rank / use_bora / bora_iters were removed from the UI (2026-07-29):
-        # stale values must be dropped, not forwarded.
-        self.assertIsNone(self._arg_value(args, "kron_rank"))
-        self.assertIsNone(self._arg_value(args, "use_bora"))
-        self.assertIsNone(self._arg_value(args, "bora_iters"))
-        self.assertEqual(self._arg_value(args, "train_gates"), "True")
-        self.assertEqual(self._arg_value(args, "init_mode"), "nkp")
-        self.assertEqual(self._arg_value(args, "g_norm_mode"), "frobenius")
+        self.assertEqual(self._arg_value(args, "algo"), "lokr")
         self.assertEqual(self._arg_value(args, "factor"), "-1")
-        # False must be omitted so the lycoris-side default (False) applies.
-        self.assertIsNone(self._arg_value(args, "use_g_out"))
-        self.assertNotIn("kron_rank", adapted)
+        stale_fields = (
+            "kron_rank", "use_bora", "bora_iters",
+            "train_gates", "init_mode", "use_g_out", "g_norm_mode",
+        )
+        for stale in stale_fields:
+            self.assertIsNone(self._arg_value(args, stale))
+            self.assertNotIn(stale, adapted)
+        self.assertEqual(
+            [w for w in warnings if any(field in w for field in stale_fields)], []
+        )
 
     def test_gsokr_and_boft_ui_fields_become_network_args(self):
         adapted, _ = adapt_anima_config(
@@ -618,16 +621,18 @@ class LoraTypeOverrideTests(unittest.TestCase):
         self.assertEqual(self._arg_value(adapted["network_args"], "algo"), "bokr")
         self.assertTrue(any("bokr" in w for w in warnings))
 
-    def test_stale_plain_lora_module_corrected_for_glokr(self):
-        adapted, _ = adapt_anima_config(
-            {
-                "pretrained_model_name_or_path": "model.safetensors",
-                "lora_type": "glokr",
-                "network_module": "networks.lora_anima",
-            }
-        )
-        self.assertEqual(adapted["network_module"], "lycoris.kohya")
-        self.assertEqual(self._arg_value(adapted["network_args"], "algo"), "glokr")
+    def test_removed_glokr_fails_instead_of_training_something_else(self):
+        from mikazuki.training_validation import TrainingConfigurationError
+
+        with self.assertRaises(TrainingConfigurationError):
+            adapt_anima_config(
+                {
+                    "pretrained_model_name_or_path": "model.safetensors",
+                    "lora_type": "glokr",
+                    "network_module": "lycoris.kohya",
+                    "lycoris_algo": "glokr",
+                }
+            )
 
     def test_removed_tglokr_fails_instead_of_training_plain_glokr(self):
         from mikazuki.training_validation import TrainingConfigurationError
@@ -646,9 +651,9 @@ class LoraTypeOverrideTests(unittest.TestCase):
         adapted, warnings = adapt_anima_config(
             {
                 "pretrained_model_name_or_path": "model.safetensors",
-                "lora_type": "glokr",
+                "lora_type": "lokr",
                 "network_module": "lycoris.kohya",
-                "lycoris_algo": "glokr",
+                "lycoris_algo": "lokr",
                 "train_time_gates": True,
                 "time_gate_dim": 4,
             }
@@ -663,9 +668,9 @@ class LoraTypeOverrideTests(unittest.TestCase):
         _, warnings = adapt_anima_config(
             {
                 "pretrained_model_name_or_path": "model.safetensors",
-                "lora_type": "glokr",
+                "lora_type": "lokr",
                 "network_module": "lycoris.kohya",
-                "lycoris_algo": "glokr",
+                "lycoris_algo": "lokr",
             }
         )
         self.assertEqual([w for w in warnings if "不符" in w], [])
