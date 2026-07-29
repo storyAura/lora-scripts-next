@@ -261,8 +261,8 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
   <table>
     <tr><th>参数</th><th>默认</th><th>说明</th></tr>
     <tr><td><code>network_weights</code></td><td>空</td><td>从已有 LoRA / LoKr 继续训练（只加载网络权重，不含优化器状态；完整断点续训用 save_state + resume）</td></tr>
-    <tr><td><code>network_dim</code></td><td>16</td><td>网络维度（rank），"补丁的表达力"。常用 4~128，<b>不是越大越好</b>：太大易过拟合且文件大。Anima LoRA 16 起步；T-LoRA 建议 32；GLoKR 可开 32~64（参数量本身很小）</td></tr>
-    <tr><td><code>network_alpha</code></td><td>16</td><td>缩放分子，实际缩放 = alpha ÷ dim。常用：等于 dim、dim/2 或 1。改 alpha 等效改学习率量级</td></tr>
+    <tr><td><code>network_dim</code></td><td>16</td><td>网络维度（rank），"补丁的表达力"。常用 4~128，<b>不是越大越好</b>：太大易过拟合且文件大。Anima LoRA 16 起步；T-LoRA 建议 32；GLoKR 可开 32~64（参数量本身很小）。<b>并非对所有算法都有效</b>，见下方「dim / alpha 有效性对照」</td></tr>
+    <tr><td><code>network_alpha</code></td><td>16</td><td>缩放分子，实际缩放 = alpha ÷ dim。常用：等于 dim、dim/2 或 1。改 alpha 等效改学习率量级。<b>并非对所有算法都有效</b>，见下方对照表</td></tr>
     <tr><td><code>base_model_quantization</code></td><td>none</td><td>冻结基座量化：none / int8 / nf4。当前允许 LoRA、LoRA+、LoRA-FA、VeRA，并要求 CUDA + bitsandbytes；rsLoRA、PiSSA、DoRA、LyCORIS 与其他实验算法会在启动前明确拒绝</td></tr>
     <tr><td><code>anima_gradient_checkpointing_mode</code></td><td>standard</td><td>设为 selective 后只缓存矩阵乘法与 SDPA 等高成本算子，减少完整 block 重算；必须同时开启 gradient_checkpointing，且不能与 CPU offload 或 block swap 组合</td></tr>
     <tr><td><code>anima_compile_blocks</code></td><td>关</td><td>逐个编译重复 DiT block，降低全模型编译的首轮成本；仅支持 Linux + CUDA + PyTorch≥2.6 + Inductor</td></tr>
@@ -274,6 +274,20 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>enable_base_weight</code></td><td>关</td><td>差异炼丹：训练前把指定 LoRA 按权重合入底模再练，学到的是"相对合并后底模"的差异</td></tr>
   </table>
   </div>
+  <h3>network_dim / network_alpha 有效性对照（按 lora_type）</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>算法</th><th>network_dim</th><th>network_alpha</th></tr>
+    <tr><td>LoRA / LoRA+ / rsLoRA / DoRA / LoHa / BoRA / MoSLoRA / T-LoRA / LoRA-FA / VeRA</td><td>✅ 真实秩</td><td>✅ 有效（rsLoRA 为 alpha÷√dim；T-LoRA 建议 alpha=dim）</td></tr>
+    <tr><td>LoKr / GLoKR / BoKR / GSoKR</td><td>⚠️ 仅是"是否继续分解"的<b>阈值</b>：低于阈值（3072 宽层约 32）时是真实秩，达到阈值即转满矩阵、继续加大无任何变化。大值是常态用法</td><td>⚠️ 满矩阵模式下被<b>静默丢弃</b>（强制 scale=1）。同一次训练里不同宽度的层可能一部分生效一部分不生效</td></tr>
+    <tr><td>GLoRA+BOFT</td><td>⚠️ 双重身份：GLoRA 路径的真实秩 + BOFT 分块因子（参数量随 dim 非单调跳变）</td><td>⚠️ 只作用于 GLoRA 路径；BOFT 旋转由 boft_constraint 控制</td></tr>
+    <tr><td>DeLoRA</td><td>✅ 真实秩（还参与范数归一）</td><td>❌ 无效，真正的缩放是 <code>delora_lambda</code></td></tr>
+    <tr><td>WaveFT</td><td>⚠️ 等于频率数，但填了 <code>waveft_n_frequency</code> 时被其覆盖</td><td>❌ 无效，真正的缩放是 <code>waveft_scaling</code></td></tr>
+    <tr><td>DEFT</td><td>⚠️ 真实秩但被静默钳制到层宽</td><td>❌ 无效，真正的缩放是 <code>deft_alpha</code></td></tr>
+    <tr><td>CDKA</td><td>❌ 完全无效，容量 = <code>cdka_r1/r2/r</code></td><td>❌ 完全无效，缩放 = <code>cdka_alpha</code>/√(r·r₂)</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">另注意：LyCORIS 系算法（LoKr/GLoKR/BoKR/BoRA/GSoKR/rsLoRA/DoRA/CDKA…）的 <code>dropout</code> 只在 <code>bypass_mode</code> 开启时生效，常规前向不应用（界面各字段已标注）。</div>
   <div class="tip">lora_type（LoRA / LoKr / GLoKR / T-LoRA…）的算法区别与每种算法的专属参数，见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a>。</div>
 </section>
 

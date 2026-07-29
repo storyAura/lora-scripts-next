@@ -25,6 +25,7 @@ from .modules.glora_boft import GLoRABOFTModule
 from .modules.bokr import BokrModule
 from .modules.bora import BoRAModule
 from .modules.gsokr import GloKrSoraModule
+from .modules.cdka import CDKAModule
 
 from .config import PRESET
 from .config_sdk import VALID_PRESET_KEYS
@@ -49,6 +50,7 @@ network_module_dict = {
     "bokr": BokrModule,
     "bora": BoRAModule,
     "gsokr": GloKrSoraModule,
+    "cdka": CDKAModule,
 }
 deprecated_arg_dict = {
     "disable_conv_cp": "use_tucker",

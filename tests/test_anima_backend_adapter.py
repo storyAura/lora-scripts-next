@@ -501,9 +501,11 @@ class AnimaBackendAdapterTests(unittest.TestCase):
         args = adapted["network_args"]
 
         self.assertEqual(self._arg_value(args, "algo"), "glokr")
-        self.assertEqual(self._arg_value(args, "kron_rank"), "2")
-        self.assertEqual(self._arg_value(args, "use_bora"), "True")
-        self.assertEqual(self._arg_value(args, "bora_iters"), "2")
+        # kron_rank / use_bora / bora_iters were removed from the UI (2026-07-29):
+        # stale values must be dropped, not forwarded.
+        self.assertIsNone(self._arg_value(args, "kron_rank"))
+        self.assertIsNone(self._arg_value(args, "use_bora"))
+        self.assertIsNone(self._arg_value(args, "bora_iters"))
         self.assertEqual(self._arg_value(args, "train_gates"), "True")
         self.assertEqual(self._arg_value(args, "init_mode"), "nkp")
         self.assertEqual(self._arg_value(args, "g_norm_mode"), "frobenius")
@@ -542,7 +544,10 @@ class AnimaBackendAdapterTests(unittest.TestCase):
         self.assertNotIn("boft_constraint", adapted)
         self.assertNotIn("boft_rescaled", adapted)
 
-    def test_ui_field_overrides_custom_network_args_duplicate(self):
+    def test_custom_network_args_passthrough_survives_removed_ui_field(self):
+        # The stale top-level kron_rank is dropped (field removed from UI), but
+        # an explicit custom network_args entry is a power-user channel and the
+        # vendored lycoris still accepts it — it must pass through untouched.
         adapted, _ = adapt_anima_config(
             {
                 "network_module": "lycoris.kohya",
@@ -553,7 +558,7 @@ class AnimaBackendAdapterTests(unittest.TestCase):
         )
         args = adapted["network_args"]
         kron_values = [a.split("=", 1)[1] for a in args if a.startswith("kron_rank=")]
-        self.assertEqual(kron_values[-1], "2")
+        self.assertEqual(kron_values, ["4"])
         self.assertEqual(self._arg_value(args, "wd_on_output"), "False")
 
     def test_finetune_strips_extension_algo_fields(self):

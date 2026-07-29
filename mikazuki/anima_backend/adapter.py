@@ -192,9 +192,6 @@ NETWORK_ONLY_FIELDS = {
     "enable_base_weight",
     "base_weights",
     "base_weights_multiplier",
-    "kron_rank",
-    "use_bora",
-    "bora_iters",
     "train_gates",
     "init_mode",
     "use_g_out",
@@ -204,6 +201,10 @@ NETWORK_ONLY_FIELDS = {
     "sora_epsilon",
     "boft_constraint",
     "boft_rescaled",
+    "cdka_r1",
+    "cdka_r2",
+    "cdka_r",
+    "cdka_alpha",
 }
 
 UI_ONLY_FIELDS = {
@@ -317,9 +318,6 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     # 本地扩展算法专属字段（glokr / gsokr / glora_boft）。
     # 布尔字段的 UI 默认值只允许 lycoris 侧默认为 False 的参数设为 true，
     # 因为 _is_empty_value 会把 False 丢弃（不发送 = lycoris 默认值）。
-    "kron_rank": "kron_rank",
-    "use_bora": "use_bora",
-    "bora_iters": "bora_iters",
     "train_gates": "train_gates",
     "init_mode": "init_mode",
     "use_g_out": "use_g_out",
@@ -329,6 +327,10 @@ LYCORIS_NETWORK_ARG_MAP: dict[str, str] = {
     "sora_epsilon": "sora_epsilon",
     "boft_constraint": "constraint",
     "boft_rescaled": "rescaled",
+    "cdka_r1": "cdka_r1",
+    "cdka_r2": "cdka_r2",
+    "cdka_r": "cdka_r",
+    "cdka_alpha": "cdka_alpha",
 }
 
 LOKR_TRAIN_NORM_WARNING = (
@@ -505,6 +507,13 @@ def adapt_anima_config(
     # are dropped silently instead of leaking into the TOML as unknown keys
     source.pop("train_time_gates", None)
     source.pop("time_gate_dim", None)
+
+    # removed GLoKR experimental fields (multi-term Kronecker sum + BoRA
+    # coupling, 2026-07-29): stale fields from old autosaves/history fall back
+    # to the vendored defaults (kron_rank=1, use_bora=False, bora_iters=1)
+    source.pop("kron_rank", None)
+    source.pop("use_bora", None)
+    source.pop("bora_iters", None)
 
     if finetune:
         for key in list(source):

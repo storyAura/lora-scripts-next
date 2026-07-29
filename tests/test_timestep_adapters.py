@@ -135,6 +135,8 @@ class LycorisMappingSymmetryTests(unittest.TestCase):
 
 class AdapterForwardingTests(unittest.TestCase):
     def test_ui_fields_reach_glokr_module(self):
+        # kron_rank was removed from the UI (2026-07-29): a stale value must be
+        # dropped while remaining fields (g_norm_mode) are still forwarded.
         adapted, _ = adapt_anima_config({
             "pretrained_model_name_or_path": "x.safetensors",
             "network_module": "lycoris.kohya",
@@ -144,12 +146,14 @@ class AdapterForwardingTests(unittest.TestCase):
             "lokr_factor": -1,
         })
         args = {item.split("=", 1)[0]: item.split("=", 1)[1] for item in adapted["network_args"]}
-        self.assertEqual(args.get("kron_rank"), "3")
+        self.assertIsNone(args.get("kron_rank"))
         self.assertEqual(args.get("g_norm_mode"), "spectral")
 
-        net, _ = _build_glokr({"kron_rank": args["kron_rank"]})
+        # Direct network_args (the custom-args power-user channel) still reach
+        # the vendored module: _build_glokr's base kwargs carry kron_rank=2.
+        net, _ = _build_glokr({"g_norm_mode": args["g_norm_mode"]})
         m0 = net.unet_loras[0]
-        self.assertEqual(m0.kron_rank, 3)
+        self.assertEqual(m0.kron_rank, 2)
 
 
 class GradientCheckpointRecomputeTests(unittest.TestCase):

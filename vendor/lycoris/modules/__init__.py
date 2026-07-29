@@ -18,6 +18,7 @@ from .glora_boft import GLoRABOFTModule
 from .bokr import BokrModule
 from .bora import BoRAModule
 from .gsokr import GloKrSoraModule
+from .cdka import CDKAModule
 
 from ..functional.general import factorization
 
@@ -39,6 +40,7 @@ MODULE_LIST = [
     GLoKRModule,
     GLoRABOFTModule,
     GloKrSoraModule,
+    CDKAModule,
 ]
 
 

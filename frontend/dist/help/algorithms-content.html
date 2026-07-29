@@ -134,6 +134,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>dora</code></td><td>分开学习权重方向与幅度</td><td>中</td><td>低 rank 表达力和幅度控制</td></tr>
     <tr><td><code>lokr</code></td><td>Kronecker 积分解，参数更省</td><td>小</td><td>画风训练、泛化要求高</td></tr>
     <tr><td><code>glokr</code></td><td>LoKr + GLoRA 三路径融合，画风特化</td><td>小</td><td>画风训练主推，默认即推荐配置</td></tr>
+    <tr><td><code>cdka</code></td><td>多分量 Kronecker + 理论指导形状（ICML 2026）</td><td>小</td><td>想按论文原则调形状的 Kronecker 尝鲜者</td></tr>
     <tr><td><code>bokr</code></td><td>LoKr + BoRA 双向幅值解耦</td><td>小</td><td>画风，想要更稳的幅度控制</td></tr>
     <tr><td><code>bora</code></td><td>LoRA + BoRA 双向幅值解耦</td><td>中</td><td>常规训练 + 幅度解耦收益</td></tr>
     <tr><td><code>gsokr</code></td><td>GLoKR 的 SoRA 稀疏化变体（实验）</td><td>小</td><td>想自动裁剪冗余 rank 的尝鲜者</td></tr>
@@ -213,6 +214,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>bypass_mode</code></td><td>关</td><td>QLyCORIS bypass 前向</td></tr>
   </table>
   </div>
+  <div class="tip warn">常规参数有效性：<code>network_dim</code> 只是"是否继续分解"的阈值——3072 宽的层上约 ≥32 就转满矩阵，再加大无任何变化（大值是常态用法）；满矩阵模式下 <code>network_alpha</code> 被静默丢弃（强制 scale=1），且同一次训练里窄层和宽层可能一边生效一边不生效。<code>dropout</code> 仅 bypass 模式生效。</div>
 </section>
 
 <section class="card" id="glokr">
@@ -223,13 +225,10 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <li><b>A 路（输入侧 G 路径，恒定启用）</b>：在原镜头前加滤镜 → 重组已有特征，结构安全</li>
     <li><b>C 路（输出侧 G 路径，可选）</b>：调整输出混色 → 色调 / 氛围类全局风格</li>
   </ul>
-  <div class="tip">界面默认值即画风推荐配置（kron_rank=2 + BoRA + 门控 + NKP 初始化），选中算法直接开练即可。完整数学原理见 <code>venv/Lib/site-packages/lycoris/GLOKR.md</code>。</div>
+  <div class="tip">界面默认值即画风推荐配置（门控 + NKP 初始化），选中算法直接开练即可。完整数学原理见 <code>venv/Lib/site-packages/lycoris/GLOKR.md</code>。</div>
   <div class="table-scroll">
   <table>
     <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
-    <tr><td><code>kron_rank</code></td><td>2</td><td>Kronecker 项求和数。多项求和打破单项分解的僵硬谱形，画风推荐 2~4；1 为经典单项模式</td></tr>
-    <tr><td><code>use_bora</code></td><td>开</td><td>BoRA 双向（行/列）权重解耦。开启后无需再开 dora_wd</td></tr>
-    <tr><td><code>bora_iters</code></td><td>2</td><td>BoRA 行/列交替平衡（Sinkhorn 式）迭代次数，推荐 2~3，消除"先行后列"顺序偏置</td></tr>
     <tr><td><code>train_gates</code></td><td>开</td><td>每条路径 1 个可学习门控 + Kron 项混合系数，G/B 配比逐层自适应</td></tr>
     <tr><td><code>init_mode</code></td><td>nkp</td><td>nkp = Van Loan 最近 Kronecker 积分解初始化，梯度第一步就流入有意义的子空间（PiSSA 思路的 Kron 移植），短周期收敛更快；kaiming = 经典随机</td></tr>
     <tr><td><code>use_g_out</code></td><td>关</td><td>输出侧 C·W₀ 路径（约每层 6k 参数），色调/氛围向。属消融项，建议同数据集开/关对照</td></tr>
@@ -238,7 +237,24 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>rank_dropout</code></td><td>空</td><td>画风训练建议保持 0 / 留空</td></tr>
   </table>
   </div>
-  <div class="tip warn">network_dim 建议 32~64（GLoKR 参数量远小于同 dim 的 LoRA，开 64 无压力）；<code>bypass_mode</code> 与 DoRA/BoRA 互斥。</div>
+  <div class="tip warn">network_dim 建议 32~64（GLoKR 参数量远小于同 dim 的 LoRA，开 64 无压力）；<code>bypass_mode</code> 与 DoRA/BoRA 互斥。常规参数有效性：dim 与 LoKr 同为分解阈值（超过即满矩阵）；满矩阵路径上 <code>network_alpha</code> 无效（强制 scale=1，逐路径判定）。</div>
+</section>
+
+<section class="card" id="cdka">
+  <h2>CDKA <span class="algo-tag tag-local">本地扩展</span></h2>
+  <p class="lead">CDKA（Component Designed Kronecker Adapters，ICML 2026，arXiv:2602.01267）= 多分量 Kronecker 适配器 + 理论指导的形状设计。更新为 ΔW = λ·Σ B⁽ⁱ⁾⊗A⁽ⁱ⁾，三个形状超参决定全部容量，<b>network_dim / alpha 对它无效</b>。</p>
+  <div class="tip">论文三原则：r₁ 要小（2~4，加大反而伤）；r₂ 一致地越大越好；r 中等即可（2~8，加过头倒退）。默认 (2, 8, 4, α=16) 即论文推荐配置。λ = α/√(r·r₂) 的稳定化缩放让换配置不用重调学习率。</div>
+  <div class="table-scroll">
+  <table>
+    <tr><th>界面参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>cdka_r1</code></td><td>2</td><td>分量形状 r₁。参数量与 r₂ 完全对称、性能却不对称——这是论文的核心洞察，保持小值</td></tr>
+    <tr><td><code>cdka_r2</code></td><td>8</td><td>分量形状 r₂。预算允许时优先加它（论文里从 2 加到 16 单调涨分）</td></tr>
+    <tr><td><code>cdka_r</code></td><td>4</td><td>Kronecker 分量个数（求和项数）。先保证 r 够（≥2），再去加 r₂</td></tr>
+    <tr><td><code>cdka_alpha</code></td><td>16</td><td>稳定化缩放的分子 α（rsLoRA 的 α/√r 在 Kronecker 情形的推广）</td></tr>
+    <tr><td><code>bypass_mode</code></td><td>关</td><td>不重建大矩阵的等价前向（vec(A·X·Bᵀ) 恒等式），适合量化底模 / 省显存</td></tr>
+  </table>
+  </div>
+  <div class="tip warn">初始化固定为论文消融最优：A = Kaiming uniform、B = 0（初始 ΔW=0）。注意论文实验全部来自 NLP / 图像分类，扩散模型上三原则属方向性参考，建议同数据集与 LoKr 对照一轮。</div>
 </section>
 
 <section class="card" id="bokr">
@@ -253,6 +269,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>bypass_mode</code></td><td>关</td><td>与 BoRA 解耦互斥，二选一</td></tr>
   </table>
   </div>
+  <div class="tip warn">常规参数有效性：同 LoKr——<code>network_dim</code> 是分解阈值（默认 decompose_both 关时 w1 恒为满矩阵，dim 达到阈值后 dim 和 alpha 双双失效）；<code>dropout</code> 仅 bypass 模式生效。</div>
 </section>
 
 <section class="card" id="bora">
@@ -265,7 +282,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>use_scalar</code></td><td>关</td><td>可学习全局缩放替代零初始化</td></tr>
   </table>
   </div>
-  <div class="tip warn">BoRA 解耦与 <code>bypass_mode</code> 互斥（界面已不提供该组合）。</div>
+  <div class="tip warn">BoRA 解耦与 <code>bypass_mode</code> 互斥（界面已不提供该组合）。常规参数有效性：<code>network_dim</code>/<code>network_alpha</code> 均为真实秩/真实缩放（与标准 LoRA 相同）；<code>dropout</code> 仅 bypass 模式生效，开启 BoRA 解耦时等于不可用。</div>
 </section>
 
 <section class="card" id="gsokr">
@@ -280,7 +297,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>lokr_factor</code></td><td>-1</td><td>Kronecker 分解因子</td></tr>
   </table>
   </div>
-  <div class="tip warn">实验性算法：未开启 sora 门控的存档无法与 GLoKR 存档自动区分，建议保留训练配置。</div>
+  <div class="tip warn">实验性算法：未开启 sora 门控的存档无法与 GLoKR 存档自动区分，建议保留训练配置。常规参数有效性：<code>network_dim</code> 是四个 Kron 因子各自的分解阈值；四因子全满矩阵时 <code>network_alpha</code> 被丢弃（强制 scale=1）。</div>
 </section>
 
 <section class="card" id="glora_boft">
@@ -293,6 +310,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>boft_rescaled</code></td><td>关</td><td>对正交旋转附加可学习缩放（rescaled 变体）</td></tr>
   </table>
   </div>
+  <div class="tip warn">常规参数有效性：<code>network_dim</code> 身兼两职——GLoRA 路径的真实秩 + BOFT 蝶形分块因子（参数量随 dim <b>非单调跳变</b>，如 3072 层上 dim=16 → 12×256 块、dim=64 → 48×64 块）；<code>network_alpha</code> 只作用于 GLoRA 路径，BOFT 旋转由 boft_constraint 控制。</div>
 </section>
 
 <section class="card" id="tlora">
@@ -332,7 +350,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>delora_lambda</code></td><td>15</td><td>更新强度 λ，必须为正有限数；值越大适配幅度越强</td></tr>
   </table>
   </div>
-  <div class="tip warn">仅支持 Linear 层；不支持 rank_dropout 或 scale_weight_norms。checkpoint 会保存底模列范数，因此可重现并可 merge。</div>
+  <div class="tip warn">仅支持 Linear 层；不支持 rank_dropout 或 scale_weight_norms。checkpoint 会保存底模列范数，因此可重现并可 merge。常规参数有效性：<code>network_dim</code> 是真实秩（并参与范数归一）；<b><code>network_alpha</code> 完全无效</b>——真正的缩放是 <code>delora_lambda</code>。</div>
 </section>
 
 <section class="card" id="waveft">
@@ -347,7 +365,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>waveft_use_idwt</code></td><td>开</td><td>使用 Haar/db1 逆小波重建；关闭则直接学习稀疏权重位置</td></tr>
   </table>
   </div>
-  <div class="tip warn">仅支持 Linear 层和 Haar/db1；不支持 rank_dropout 或 scale_weight_norms。频率数必须按最小目标层尺寸选择，配置过大会在启动时明确失败。</div>
+  <div class="tip warn">仅支持 Linear 层和 Haar/db1；不支持 rank_dropout 或 scale_weight_norms。频率数必须按最小目标层尺寸选择，配置过大会在启动时明确失败。常规参数有效性：填了 <code>waveft_n_frequency</code> 时 <code>network_dim</code> 被其覆盖（等于不生效）；<b><code>network_alpha</code> 完全无效</b>——真正的缩放是 <code>waveft_scaling</code>。</div>
 </section>
 
 <section class="card" id="deft">
@@ -362,7 +380,7 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
     <tr><td><code>deft_init_scale</code></td><td>1</td><td>仅关闭零扰动初始化时缩放随机 R 的标准差</td></tr>
   </table>
   </div>
-  <div class="tip warn">仅支持 Linear 层；不支持 rank_dropout 或 scale_weight_norms。QR 路径在 FP32 中计算投影以保护 BF16 稳定性。</div>
+  <div class="tip warn">仅支持 Linear 层；不支持 rank_dropout 或 scale_weight_norms。QR 路径在 FP32 中计算投影以保护 BF16 稳定性。常规参数有效性：<code>network_dim</code> 是真实秩但会被静默钳制到层宽；<b><code>network_alpha</code> 完全无效</b>——真正的缩放是 <code>deft_alpha</code>（0 表示 1）。</div>
 </section>
 
 <section class="card" id="moslora">

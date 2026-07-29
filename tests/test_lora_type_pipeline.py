@@ -222,6 +222,9 @@ class LoraTypePipelineTests(unittest.TestCase):
         )
 
     def test_glokr_recommended_defaults_reach_module(self):
+        # kron_rank / use_bora / bora_iters were removed from the UI (2026-07-29);
+        # stale values from old autosaves must be dropped so the module falls
+        # back to the classic single-term, no-BoRA form.
         m0 = self._assert_pipeline(
             {
                 "network_module": "lycoris.kohya", "lycoris_algo": "glokr",
@@ -230,10 +233,48 @@ class LoraTypePipelineTests(unittest.TestCase):
             },
             "GLoKRModule",
         )
-        self.assertTrue(m0.wd, "use_bora should imply weight decomposition")
-        self.assertEqual(int(m0.kron_rank), 2)
+        self.assertFalse(m0.wd, "stale use_bora must be dropped, not forwarded")
+        self.assertEqual(int(m0.kron_rank), 1)
         self.assertTrue(hasattr(m0, "gate_b"), "train_gates should create gate params")
-        self.assertTrue(hasattr(m0, "bora_scale_r"), "BoRA scales should exist")
+        self.assertFalse(hasattr(m0, "bora_scale_r"), "BoRA scales must not exist")
+
+    def test_cdka_paper_defaults_reach_module(self):
+        m0 = self._assert_pipeline(
+            {
+                "network_module": "lycoris.kohya", "lycoris_algo": "cdka",
+                "cdka_r1": 2, "cdka_r2": 8, "cdka_r": 4, "cdka_alpha": 16,
+            },
+            "CDKAModule",
+        )
+        self.assertEqual((m0.cdka_r1, m0.cdka_r2, m0.cdka_r), (2, 8, 4))
+        # A: (r, r₁, d_in/r₂) Kaiming；B: (r, d_out/r₁, r₂) 置零 → 初始 ΔW = 0
+        self.assertEqual(tuple(m0.cdka_a.shape), (4, 2, DIM // 8))
+        self.assertEqual(tuple(m0.cdka_b.shape), (4, DIM // 2, 8))
+        self.assertAlmostEqual(m0.scale, 16 / math.sqrt(4 * 8))
+        self.assertTrue(torch.all(m0.get_weight() == 0))
+
+    def test_cdka_bypass_path_matches_weight_rebuild(self):
+        _, _, loras = _build({
+            "network_module": "lycoris.kohya", "lycoris_algo": "cdka",
+            "bypass_mode": True,
+        })
+        m0 = loras[0]
+        with torch.no_grad():
+            m0.cdka_b.normal_()  # B 置零时两条路径恒为 0，先随机化再比对
+        m0.eval()
+        x = torch.randn(3, DIM)
+        expected = torch.nn.functional.linear(x, m0.get_weight())
+        actual = m0.bypass_forward_diff(x, scale=1)
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
+
+    def test_cdka_r1_r2_fall_back_to_divisors(self):
+        # DIM=16 不能被 r₂=6 整除 → 退到最大整除数 4；r₁=3 → 退到 2
+        _, _, loras = _build({
+            "network_module": "lycoris.kohya", "lycoris_algo": "cdka",
+            "cdka_r1": 3, "cdka_r2": 6, "cdka_r": 2,
+        })
+        m0 = loras[0]
+        self.assertEqual((m0.cdka_r1, m0.cdka_r2), (2, 4))
 
     def test_bokr_positional_signature_and_bora(self):
         # Regression: BokrModule.__init__ must keep use_tucker at positional slot 9,

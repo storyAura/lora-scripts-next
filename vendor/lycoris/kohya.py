@@ -83,6 +83,10 @@ def create_network(
         ("bora_iters", int),
         ("sora_r", int),
         ("sora_epsilon", float),
+        ("cdka_r1", int),
+        ("cdka_r2", int),
+        ("cdka_r", int),
+        ("cdka_alpha", float),
     ):
         if _key in kwargs:
             extra_algo_kwargs[_key] = _cast(kwargs[_key])
