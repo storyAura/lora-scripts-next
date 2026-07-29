@@ -389,24 +389,12 @@ def _anima_lokr_full_matrix_training(config: dict) -> bool:
 
 
 def _warn_lokr_precision_risks(config: dict) -> None:
+    # Note: the old "may require full_bf16=true" hint was removed 2026-07-29.
+    # The vendored LoKr forward computes the merged delta in fp32 and casts it
+    # itself, so dtype alignment needs no user action — and full_bf16 actively
+    # hurts by putting optimizer updates at bf16 ULP granularity.
     if not _anima_lokr_training(config):
         return
-
-    mixed = str(config.get("mixed_precision", "")).strip().lower()
-    full_key = "full_bf16" if mixed == "bf16" else "full_fp16" if mixed == "fp16" else None
-    if full_key and not config.get(full_key):
-        _add_training_warning(
-            config,
-            f"Anima LoKr mixed_precision={mixed} may require {full_key}=true to keep "
-            "adapter and activation dtypes aligned. The trainer keeps your precision "
-            "settings unchanged.",
-        )
-        log.warning(
-            "Anima LoKr mixed_precision=%s may require %s=true to keep adapter and "
-            "activation dtypes aligned. User precision settings are unchanged.",
-            mixed,
-            full_key,
-        )
 
     if _anima_lokr_full_matrix_training(config):
         active_full_half = [

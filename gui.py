@@ -7,7 +7,8 @@ import sys
 
 from mikazuki.launch_utils import (base_dir_path, catch_exception, git_tag,
                                    prepare_environment, check_port_avaliable,
-                                   ensure_requirements_installed)
+                                   ensure_requirements_installed,
+                                   ensure_vendored_lycoris_installed)
 from mikazuki.log import log
 from mikazuki.portable_utils import sanitize_embedded_deps, train_env_overrides
 
@@ -139,6 +140,10 @@ def launch():
         # added or missing packages (e.g. onnxruntime-gpu) get repaired instead
         # of silently breaking tagging/training.
         ensure_requirements_installed("requirements.txt")
+
+    # pip reinstalls silently revert lycoris-lora to upstream; repair the
+    # vendored copy at boot so lycoris training never hits the trainer guard.
+    ensure_vendored_lycoris_installed()
 
     # Protect each service's default port before scanning fallbacks. Otherwise
     # TensorBoard can claim 6008 as a fallback and make monitor links open it.

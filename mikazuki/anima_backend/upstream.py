@@ -189,3 +189,38 @@ def prefer_upstream_imports(upstream_path: Path) -> None:
     if upstream in sys.path:
         sys.path.remove(upstream)
     sys.path.insert(0, upstream)
+
+
+_LYCORIS_SYNC_HINT = (
+    "Installed LyCORIS is the upstream pip package, not this repo's vendored copy.\n"
+    "The vendored copy carries the local algorithms (glokr / bokr / bora / gsokr / "
+    "glora_boft / cdka) and the fp32-safe merged forward; upstream LoKr silently "
+    "absorbs small bf16 updates during training.\n"
+    "Fix: python scripts/sync_vendored_lycoris.py\n"
+    "Set ANIMA_ALLOW_LYCORIS_DRIFT=1 to continue anyway."
+)
+
+
+def verify_vendored_lycoris() -> None:
+    """Refuse to train through lycoris.kohya when upstream LyCORIS is installed.
+
+    Only the vendored tree computes the LoKr merged delta in fp32
+    (`compute_merged_delta`); its absence in the imported module means pip
+    reinstalled upstream over the synced copy and training would silently run
+    the numerically unsafe forward.
+    """
+    if os.environ.get("ANIMA_ALLOW_LYCORIS_DRIFT", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }:
+        return
+
+    import importlib
+
+    try:
+        lokr = importlib.import_module("lycoris.modules.lokr")
+    except Exception as exc:
+        raise RuntimeError(
+            f"LyCORIS is not importable ({exc}).\n{_LYCORIS_SYNC_HINT}"
+        ) from exc
+    if getattr(lokr, "compute_merged_delta", None) is None:
+        raise RuntimeError(_LYCORIS_SYNC_HINT)

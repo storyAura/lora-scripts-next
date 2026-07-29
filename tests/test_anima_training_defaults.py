@@ -69,7 +69,10 @@ class AnimaTrainingDefaultsTests(unittest.TestCase):
         self.assertNotIn("full_bf16", config)
         self.assertEqual(config["unet_lr"], 5e-5)
 
-    def test_anima_lokr_bf16_warns_without_changing_full_precision(self):
+    def test_anima_lokr_bf16_no_longer_suggests_full_bf16(self):
+        # The vendored LoKr forward computes the merged delta in fp32 and casts
+        # it itself; the old "may require full_bf16=true" hint was harmful
+        # (bf16 master weights round small optimizer updates away) and is gone.
         config = {
             "mixed_precision": "bf16",
             "optimizer_type": "AdamW8bit",
@@ -82,7 +85,7 @@ class AnimaTrainingDefaultsTests(unittest.TestCase):
         apply_anima_training_defaults(config, "anima-lora")
 
         self.assertNotIn("full_bf16", config)
-        self.assertIn("may require full_bf16=true", config["_training_warnings"][0])
+        self.assertNotIn("_training_warnings", config)
 
     def test_anima_lokr_full_matrix_warns_without_changing_user_params(self):
         config = {

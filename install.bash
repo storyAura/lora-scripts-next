@@ -72,6 +72,13 @@ echo "Installing deps..."
 cd "$script_dir" || exit
 pip install --upgrade -r requirements.txt
 
+# pip installs the upstream lycoris-lora; overwrite it with the vendored copy
+# (local algos glokr/bokr/... + numerical fixes). Without this, Anima LyCORIS
+# training refuses to start (verify_vendored_lycoris guard).
+echo "Installing vendored LyCORIS over the pip copy..."
+python scripts/sync_vendored_lycoris.py || \
+    echo "Warning: vendored LyCORIS sync failed. Run 'python scripts/sync_vendored_lycoris.py' manually before training."
+
 echo "Installing Flash Attention 2 (optional, for training acceleration)..."
 pip install flash-attn --no-build-isolation 2>/dev/null && \
     echo "Flash Attention 2 installed successfully" || \

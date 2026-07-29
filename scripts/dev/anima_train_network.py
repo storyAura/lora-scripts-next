@@ -11,13 +11,13 @@ if ROOT_STR not in sys.path:
     sys.path.insert(0, ROOT_STR)
 
 from mikazuki.anima_backend.adapter import adapt_anima_config
-from mikazuki.anima_backend.lycoris_patch import patch_lokr_dora_bf16_forward
 from mikazuki.anima_backend.upstream import (
     load_toml_file,
     prefer_upstream_imports,
     resolve_upstream_path,
     upstream_entrypoint,
     verify_pinned_commit,
+    verify_vendored_lycoris,
 )
 
 
@@ -42,7 +42,7 @@ def _dump_flat_toml(config: dict) -> str:
     return "\n".join(f"{key} = {_format_toml_value(value)}" for key, value in config.items()) + "\n"
 
 
-def _rewrite_config_file(argv: list[str]) -> Path | None:
+def _rewrite_config_file(argv: list[str]) -> tuple[Path, dict] | None:
     if "--config_file" not in argv:
         return None
     index = argv.index("--config_file")
@@ -58,7 +58,7 @@ def _rewrite_config_file(argv: list[str]) -> Path | None:
     adapted_path = original.with_name(f"{original.stem}-sd-scripts.toml")
     adapted_path.write_text(_dump_flat_toml(adapted), encoding="utf-8")
     argv[index + 1] = str(adapted_path)
-    return adapted_path
+    return adapted_path, adapted
 
 
 def main() -> None:
@@ -66,8 +66,10 @@ def main() -> None:
     verify_pinned_commit(root)
     upstream_path = resolve_upstream_path(root)
     prefer_upstream_imports(upstream_path)
-    patch_lokr_dora_bf16_forward()
-    _rewrite_config_file(sys.argv)
+    rewritten = _rewrite_config_file(sys.argv)
+    adapted_config = rewritten[1] if rewritten else {}
+    if str(adapted_config.get("network_module") or "") == "lycoris.kohya":
+        verify_vendored_lycoris()
     script = upstream_entrypoint(upstream_path, _read_backend_entrypoint(root))
     if os.environ.get("ANIMA_BACKEND_WRAPPER_SMOKE") == "1":
         print(f"Anima backend wrapper smoke OK: {script}")

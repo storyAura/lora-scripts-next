@@ -37,15 +37,17 @@ class AnimaTrainWrapperTests(unittest.TestCase):
             )
             argv = ["anima_train_network.py", "--config_file", str(config_path)]
 
-            adapted_path = module._rewrite_config_file(argv)
+            rewritten = module._rewrite_config_file(argv)
 
-            self.assertIsNotNone(adapted_path)
-            assert adapted_path is not None
+            self.assertIsNotNone(rewritten)
+            assert rewritten is not None
+            adapted_path, adapted_config = rewritten
             self.assertEqual(argv[-1], str(adapted_path))
             adapted_text = adapted_path.read_text(encoding="utf-8")
             self.assertIn('pretrained_model_name_or_path = "model.safetensors"', adapted_text)
             self.assertNotIn("model_train_type", adapted_text)
             self.assertNotIn("enable_preview", adapted_text)
+            self.assertEqual(adapted_config.get("network_module"), "networks.lora_anima")
 
     def test_rewrite_config_file_ignores_missing_config_arg(self):
         module = load_wrapper_module()

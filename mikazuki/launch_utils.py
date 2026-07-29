@@ -1,3 +1,4 @@
+import importlib.util
 import locale
 import os
 import platform
@@ -23,6 +24,41 @@ python_bin = sys.executable
 
 def base_dir_path():
     return Path(__file__).parents[1].absolute()
+
+
+def ensure_vendored_lycoris_installed():
+    """Best-effort boot repair: keep the venv lycoris in sync with vendor/lycoris.
+
+    pip installs/reinstalls silently revert lycoris-lora to upstream, which lacks
+    the local algorithms and the fp32-safe merged forward. The Anima trainer
+    refuses to start lycoris training in that state (verify_vendored_lycoris),
+    so repair the copy here at startup instead of failing at train time.
+    Uses find_spec to locate the package without importing it (no torch import).
+    """
+    try:
+        spec = importlib.util.find_spec("lycoris")
+        if spec is None or not spec.submodule_search_locations:
+            return
+        target = Path(next(iter(spec.submodule_search_locations)))
+
+        sync_script = base_dir_path() / "scripts" / "sync_vendored_lycoris.py"
+        sync_spec = importlib.util.spec_from_file_location(
+            "sync_vendored_lycoris", sync_script
+        )
+        if sync_spec is None or sync_spec.loader is None:
+            return
+        sync = importlib.util.module_from_spec(sync_spec)
+        sync_spec.loader.exec_module(sync)
+
+        drifted = sync.compare(target)
+        if drifted:
+            copied = sync.install(target)
+            log.info(
+                f"Vendored LyCORIS synced into venv: {copied} file(s) copied "
+                f"({len(drifted)} were stale or missing)"
+            )
+    except Exception as exc:
+        log.warning(f"Vendored LyCORIS sync check skipped: {exc}")
 
 
 def find_windows_git():

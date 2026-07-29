@@ -175,7 +175,11 @@ page *is* the Anima page (historical naming, see `frontend/VENDOR.md`).
 
 - `mikazuki/anima_backend/` — the standard path: `adapt_anima_config()` rewrites GUI keys into
   sd-scripts keys, `upstream.py` verifies the pinned `vendor/sd-scripts` commit
-  (`ANIMA_ALLOW_COMMIT_DRIFT=1` downgrades to a warning), `lycoris_patch.py` applies runtime patches.
+  (`ANIMA_ALLOW_COMMIT_DRIFT=1` downgrades to a warning) and refuses lycoris.kohya training on
+  an unsynced venv (`verify_vendored_lycoris`, `ANIMA_ALLOW_LYCORIS_DRIFT=1` bypasses).
+  Never re-add runtime monkeypatches of LyCORIS forwards: the removed `lycoris_patch.py` used
+  to clobber the fixed LoKr forward with a bf16-absorbing copy on every launch
+  (`tests/test_anima_lycoris_guard.py` guards against a comeback).
 - `mikazuki/anima_fast_backend/` — an optional external trainer installed into
   `extensions/anima_lora/` with its **own venv**; launches `train.py` directly, bypassing
   accelerate. Kill switch: `LORA_ENABLE_ANIMA_FAST=0`.
@@ -190,9 +194,11 @@ page *is* the Anima page (historical naming, see `frontend/VENDOR.md`).
 | `frontend/dist/` | Pre-compiled frontend, built elsewhere | patch the built artifacts directly |
 
 **`vendor/lycoris` gotcha:** `pip install lycoris-lora` overwrites it with upstream, which has
-none of the local algos. Run `scripts/sync_vendored_lycoris.py` after any venv rebuild;
-`tests/test_vendored_lycoris.py` fails if the installed copy drifts from the vendored one.
-Never edit only the venv copy. Details in `vendor/lycoris/VENDOR.md`.
+none of the local algos. `gui.py` auto-repairs the venv copy at startup and `install.bash`
+runs the sync after installing requirements; for manual venv work run
+`scripts/sync_vendored_lycoris.py` yourself. `tests/test_vendored_lycoris.py` fails if the
+installed copy drifts from the vendored one, and the trainer refuses lycoris.kohya runs on an
+unsynced venv. Never edit only the venv copy. Details in `vendor/lycoris/VENDOR.md`.
 
 ### Frontend: patch the build output
 
