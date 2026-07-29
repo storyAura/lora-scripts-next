@@ -30,18 +30,18 @@ venv\Scripts\python.exe -m pytest -q tests\                                   # 
 # Never leave sys.modules stubs installed at test-module import time — one module's
 # leftover stub breaks later modules that import the real package under pytest.
 
-python scripts/sync_vendored_lycoris.py            # install vendor/lycoris over the pip one
+python scripts/sync_vendored_lycoris.py            # vendor/lycoris → venv (gui.py also self-heals this at boot)
 python scripts/sync_vendored_lycoris.py --check    # report drift only (exit 1 if stale)
 python scripts/bump_spa_asset_cache_key.py         # after editing frontend/dist
 ```
 
 ### Known-failing tests (pre-existing, not your change)
 
-unittest baseline as of 2026-07-28 (452 tests): **4 failures + 1 skipped** —
+unittest baseline as of 2026-07-29 (460 tests): **4 failures + 1 skipped** —
 `test_anima_backend_upstream` (3, expects `vendor/sd-scripts` to be a git submodule) and
 `test_anima_fast_integration_static` (1, dist still pins `sd-trainer-brand.js?v=2.8.35`;
 cosmetic — that file is served no-cache).
-pytest baseline (`-m pytest -q tests\`, ~660 passed): the same 4 plus pytest-only
+pytest baseline (`-m pytest -q tests\`, ~666 passed): the same 4 plus pytest-only
 pre-existing reds — `test_china_hub` (2: one asserts modelscope-missing behavior, one
 downloads from ModelScope), `test_cli_entrypoints` (1, README does not document
 `train_anima_by_toml.sh`), `test_dataset_editor_api` (1, dist tageditor shell lacks the
@@ -89,16 +89,19 @@ The TOML is rewritten **twice** (GUI side, then wrapper side). `mixed_precision`
 out of the written TOML to feed accelerate, keeping launcher and trainer consistent.
 
 Adding a UI parameter means touching both `mikazuki/schema/*.ts` (the form) **and** the backend
-mapping — for LyCORIS algos that is `LYCORIS_NETWORK_ARG_MAP` in
-`mikazuki/anima_backend/adapter.py`, whose reverse table lives in
-`mikazuki/utils/config_import.py` (keep them symmetric; `tests/test_timestep_adapters.py` asserts this).
+mapping in `mikazuki/anima_backend/adapter.py`. Two channels: standalone `networks.*` modules
+register their fields in `ANIMA_NETWORK_MODULE_ARG_FIELDS` (the default for anything new — see
+the placement rule below); the frozen LyCORIS algos use `LYCORIS_NETWORK_ARG_MAP`. Each has a
+reverse/hydration table in `mikazuki/utils/config_import.py` (`_ANIMA_NETWORK_ARG_TO_UI` /
+`_LYCORIS_NETWORK_ARG_TO_UI` plus the bool-coercion sets) — keep forward and reverse in sync;
+`tests/test_timestep_adapters.py` asserts the LyCORIS pair.
 
 ### Pre-launch guards (run before any file/process work; audit 2026-07-28)
 
 - `mikazuki/training_validation.py` — pure-Mapping validator (no torch import), called from
   both `create_toml_file()` and `adapt_anima_config()`. Removed algorithms go into
   `UNIMPLEMENTED_ANIMA_ADAPTER_TYPES` so a stale saved config fails loudly instead of silently
-  training something else (precedent: tglokr, removed 2026-07-28).
+  training something else (precedents: tglokr 2026-07-28, glokr 2026-07-29).
 - `mikazuki/attention_probe.py` — real forward/backward probes, cached per environment
   fingerprint. Auto-detect picks the first backend that passes; an explicitly requested
   xformers/flash whose probe fails raises `AttentionBackendUnavailableError`, which
@@ -189,7 +192,7 @@ page *is* the Anima page (historical naming, see `frontend/VENDOR.md`).
 | Path | What | Editable? |
 |---|---|---|
 | `vendor/sd-scripts/` | Modified kohya sd-scripts — the real Anima trainers | yes, this is where trainer fixes go |
-| `vendor/lycoris/` | Modified LyCORIS (local algos: glokr / bokr / bora / gsokr / glora_boft) | yes — then run the sync script |
+| `vendor/lycoris/` | Modified LyCORIS — **frozen 2026-07-29** (LoKr fp32-safe forward + bokr / bora / gsokr / glora_boft; the glokr & cdka copies are legacy-only) | numerical fixes to existing algos only, never new ones — then run the sync script |
 | `scripts/stable/`, `scripts/dev/` | Vendored kohya stable/dev branches | no, except the two `anima_train*.py` wrappers |
 | `frontend/dist/` | Pre-compiled frontend, built elsewhere | patch the built artifacts directly |
 
@@ -257,7 +260,8 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
   Never commit local-only material into the tracked directories.
 - Contract paths that must not be renamed: `gui.py`, `run_gui.bat`, `start_autodl.sh`,
   `setup_environment.py`, `requirements.txt`, `VERSION`, and the portable layout under
-  `scripts/portable/`. Full list in `docs/repo-layout.md`.
+  `scripts/portable/` (`launch_portable.bat`, bundle roots `python_embeded/`/`SD-Trainer/`;
+  `build-scripts/` builds that bundle). Full list in `docs/repo-layout.md`.
 - Conventional-commit messages; Chinese subject lines are the norm in this fork.
 
 ## Anima-specific traps
@@ -274,8 +278,8 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
   `vendor/lycoris/GLOKR.md` has the full parameter reference.
 - For LoKr-family algos `network_dim` is only a threshold ("stop decomposing the Kronecker
   factors"), not a capacity dial — huge values are idiomatic. Capacity comes from `factor`
-  (`-1` = balanced = *fewest* parameters; smaller values inflate them quadratically) and, for
-  GLoKR, from `kron_rank` (linear).
+  (`-1` = balanced = *fewest* parameters; smaller values inflate them quadratically). CDKA
+  ignores `network_dim`/`network_alpha` entirely — capacity is `cdka_r1/r2/r`.
 - Preview sampling: `sample_sampler` is decorative — the only implementation is the built-in
   rectified-flow Euler in `anima_train_utils.do_sample()`. `sample_scheduler` is real
   (simple/beta). Per-image sample params travel as prompt-line flags
