@@ -37,11 +37,11 @@ python scripts/bump_spa_asset_cache_key.py         # after editing frontend/dist
 
 ### Known-failing tests (pre-existing, not your change)
 
-unittest baseline as of 2026-07-29 (460 tests): **4 failures + 1 skipped** —
+unittest baseline as of 2026-07-31 (462 tests): **4 failures + 1 skipped** —
 `test_anima_backend_upstream` (3, expects `vendor/sd-scripts` to be a git submodule) and
 `test_anima_fast_integration_static` (1, dist still pins `sd-trainer-brand.js?v=2.8.35`;
 cosmetic — that file is served no-cache).
-pytest baseline (`-m pytest -q tests\`, ~666 passed): the same 4 plus pytest-only
+pytest baseline (`-m pytest -q tests\`, ~668 passed): the same 4 plus pytest-only
 pre-existing reds — `test_china_hub` (2: one asserts modelscope-missing behavior, one
 downloads from ModelScope), `test_cli_entrypoints` (1, README does not document
 `train_anima_by_toml.sh`), `test_dataset_editor_api` (1, dist tageditor shell lacks the
@@ -203,6 +203,19 @@ runs the sync after installing requirements; for manual venv work run
 installed copy drifts from the vendored one, and the trainer refuses lycoris.kohya runs on an
 unsynced venv. Never edit only the venv copy. Details in `vendor/lycoris/VENDOR.md`.
 
+**LyCORIS 目标层圈选 (2026-07-31 定案):** the adapter auto-attaches
+`config/lycoris_anima_preset.toml` to every `lycoris.kohya` run. Its target surface
+deliberately mirrors `lora_anima.py`'s exclusion regex (`_modulation|_norm|_embedder|
+final_layer`): only attn+mlp linears inside Block / LLMAdapterTransformerBlock are trained.
+Never widen it back — training the `adaln_modulation` layers (per-block multiplicative tone
+gates) progressively wrecks previews and products into saturation/contrast collapse; this was
+the root cause of the 07-31 "LoKr 全灭而 LoRA 健康" incident, misattributed for weeks to the
+bf16 forward and then to full_matrix. Preset mechanics: `match_fn` is regex by default, so
+glob-style `exclude_name` patterns need `use_fnmatch = true`; and exclusion inside class-swept
+children only works because the vendored `wrapper.py` threads `target_exclude_names` through
+`create_modules_` (upstream ignores it there). `tests/test_lycoris_preset_exclusion.py`
+guards the mechanism.
+
 **Algorithm placement rule (2026-07-29, user decree):** new algorithms — paper-based or
 experimental — are standalone `vendor/sd-scripts/networks/*_anima.py` modules (clone the
 `moslora_anima.py` scaffolding: `_network_factory`/`_module_class` hooks over `lora_anima`,
@@ -280,6 +293,11 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
   factors"), not a capacity dial — huge values are idiomatic. Capacity comes from `factor`
   (`-1` = balanced = *fewest* parameters; smaller values inflate them quadratically). CDKA
   ignores `network_dim`/`network_alpha` entirely — capacity is `cdka_r1/r2/r`.
+- LoKr `full_matrix=true` is a **supported** mode, not a forbidden one: with it (or with a
+  huge `network_dim`, which is equivalent — dim is a threshold) `dim`/`alpha` are ignored
+  (LyCORIS forces scale=1) and `adapt_anima_config` auto-fills `scale_weight_norms=1.0` when
+  the field is left empty (explicit values, including `0` = off, are respected). Do not
+  re-introduce the old warn-only behavior — the schema copy promises this auto-guardrail.
 - Preview sampling: `sample_sampler` is decorative — the only implementation is the built-in
   rectified-flow Euler in `anima_train_utils.do_sample()`. `sample_scheduler` is real
   (simple/beta). Per-image sample params travel as prompt-line flags
