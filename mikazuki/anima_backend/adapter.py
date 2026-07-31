@@ -350,6 +350,11 @@ LOKR_FULL_MATRIX_WARNING = (
     "disabling full_bf16/full_fp16 and setting scale_weight_norms=1 if the first "
     "epoch becomes unstable. The trainer keeps your parameters unchanged."
 )
+LOKR_FULL_MATRIX_GUARD_WARNING = (
+    "Anima LoKr full_matrix=true: scale_weight_norms was empty, so the UI's "
+    "promised stability guardrail was auto-enabled (scale_weight_norms=1.0). "
+    "Set scale_weight_norms=0 explicitly to opt out."
+)
 
 
 def _is_empty_value(value: Any) -> bool:
@@ -582,7 +587,13 @@ def adapt_anima_config(
             if removed_train_norm:
                 warnings.append(LOKR_TRAIN_NORM_WARNING)
             if _network_args_has_truthy_arg(network_args, "full_matrix"):
-                warnings.append(LOKR_FULL_MATRIX_WARNING)
+                if _is_empty_value(source.get("scale_weight_norms")):
+                    # 兑现 schema 文案承诺的全矩阵稳定护栏:留空自动启用,
+                    # 显式填写(含 0=关闭)一律尊重用户值。
+                    source["scale_weight_norms"] = 1.0
+                    warnings.append(LOKR_FULL_MATRIX_GUARD_WARNING)
+                else:
+                    warnings.append(LOKR_FULL_MATRIX_WARNING)
             if (
                 str(source.get("mixed_precision", "")).strip().lower() == "bf16"
                 and (

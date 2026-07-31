@@ -406,12 +406,13 @@ def _warn_lokr_precision_risks(config: dict) -> None:
             _add_training_warning(
                 config,
                 "Anima LoKr full_matrix=true is a high-risk stability mode. "
-                "Consider disabling full_bf16/full_fp16 and setting scale_weight_norms=1 "
-                "if the first epoch becomes unstable. The trainer keeps your parameters unchanged.",
+                "Disable full_bf16/full_fp16 if enabled; when scale_weight_norms "
+                "is left empty, the launcher auto-enables the guardrail "
+                "(scale_weight_norms=1.0, set 0 explicitly to opt out).",
             )
             log.warning(
-                "Anima LoKr full_matrix=true is a high-risk stability mode. "
-                "User full precision and scale_weight_norms settings are unchanged."
+                "Anima LoKr full_matrix=true: launcher auto-enables "
+                "scale_weight_norms=1.0 when the field is left empty."
             )
 
 

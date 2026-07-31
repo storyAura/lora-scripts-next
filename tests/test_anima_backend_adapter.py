@@ -401,7 +401,7 @@ class AnimaBackendAdapterTests(unittest.TestCase):
         )
         self.assertTrue(any("full_matrix=true" in warning for warning in warnings))
 
-    def test_lokr_full_matrix_warns_without_changing_user_params(self):
+    def test_lokr_full_matrix_autofills_scale_weight_norms_guardrail(self):
         config = {
             "network_module": "lycoris.kohya",
             "lycoris_algo": "lokr",
@@ -414,8 +414,24 @@ class AnimaBackendAdapterTests(unittest.TestCase):
 
         self.assertIn("full_matrix=True", adapted["network_args"])
         self.assertTrue(adapted["full_bf16"])
-        self.assertNotIn("scale_weight_norms", adapted)
-        self.assertTrue(any("full_matrix=true" in warning for warning in warnings))
+        self.assertEqual(adapted["scale_weight_norms"], 1.0)
+        self.assertTrue(any("scale_weight_norms=1.0" in warning for warning in warnings))
+
+    def test_lokr_full_matrix_respects_explicit_scale_weight_norms(self):
+        for explicit in (0, 2.5):
+            with self.subTest(explicit=explicit):
+                config = {
+                    "network_module": "lycoris.kohya",
+                    "lycoris_algo": "lokr",
+                    "full_matrix": True,
+                    "scale_weight_norms": explicit,
+                }
+
+                adapted, warnings = adapt_anima_config(config)
+
+                self.assertEqual(adapted["scale_weight_norms"], explicit)
+                self.assertFalse(any("auto-enabled" in warning for warning in warnings))
+                self.assertTrue(any("full_matrix=true" in warning for warning in warnings))
 
     def test_lokr_fp16_keeps_weight_decomposition_args(self):
         config = {
