@@ -1,13 +1,16 @@
 enable_conv = false
+use_fnmatch = true
 
+# 目标面与 networks/lora_anima.py 的排除正则保持一致(_modulation|_norm|_embedder|final_layer):
+# 只训 Block / LLM Adapter 内的注意力与 MLP。AdaLN 调制层是逐块乘性的全局色调闸,
+# 训练它会导致预览/成品全局色彩崩坏(2026-07-31 定案);PatchEmbed / TimestepEmbedding /
+# FinalLayer 与嵌入、归一化层同理排除。第三方 AnimaLoraToolkit 的默认目标面亦同此取舍。
 unet_target_module = [
   "Block",
-  "PatchEmbed",
-  "TimestepEmbedding",
-  "FinalLayer",
   "LLMAdapterTransformerBlock",
 ]
 unet_target_name = []
+exclude_name = ["*adaln_modulation*", "*norm*"]
 
 text_encoder_target_module = [
   "Qwen3Attention",

@@ -370,11 +370,25 @@ class LycorisNetwork(torch.nn.Module):
             algo,
             current_lora_map: dict[str, Any],
             configs={},
+            target_exclude_names=[],
+            exclude_root: str = "",
         ):
             assert current_lora_map is not None, "No mapping supplied"
             loras = current_lora_map
             lora_names = []
             for name, module in root_module.named_modules():
+                # Exclusion patterns match full dotted paths from the model
+                # root, so class-swept children honor exclude_name exactly
+                # like the outer name-based loop does.
+                if exclude_root and name:
+                    full_name = f"{exclude_root}.{name}"
+                else:
+                    full_name = name or exclude_root
+                if full_name and (
+                    full_name in target_exclude_names
+                    or any(self.match_fn(t, full_name) for t in target_exclude_names)
+                ):
+                    continue
                 module_name = module.__class__.__name__
                 if module_name in self.MODULE_ALGO_MAP and module is not root_module:
                     next_config = self.MODULE_ALGO_MAP[module_name]
@@ -385,6 +399,8 @@ class LycorisNetwork(torch.nn.Module):
                         next_algo,
                         loras,
                         configs=next_config,
+                        target_exclude_names=target_exclude_names,
+                        exclude_root=full_name,
                     )
                     loras = {**loras, **new_lora_map}
                     for lora_name, lora in zip(new_lora_names, new_loras):
@@ -453,6 +469,8 @@ class LycorisNetwork(torch.nn.Module):
                         algo,
                         lora_map,
                         configs=next_config,
+                        target_exclude_names=target_exclude_names,
+                        exclude_root=name,
                     )
                     lora_map = {**lora_map, **_lora_map}
                     loras.extend(lora_lst)
