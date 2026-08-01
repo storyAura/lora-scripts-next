@@ -71,6 +71,8 @@ from mikazuki.tagger.jobs import run_interrogate_job, run_prefetch_job
 from mikazuki.tagger.progress import tagger_progress
 from mikazuki.tasks import tm
 from mikazuki.train_log_hub import hub as train_log_hub
+from mikazuki.train_queue import train_queue
+from mikazuki.app.queue_api import router as train_queue_router
 from mikazuki.utils import train_utils
 from mikazuki.training_validation import (
     TrainingConfigurationError,
@@ -90,6 +92,7 @@ from mikazuki.utils.tk_window import (open_directory_selector,
 
 router = APIRouter()
 router.include_router(dataset_editor_router)
+router.include_router(train_queue_router)
 
 ANIMA_TRAIN_TYPES = {"anima-lora", "sd3-lora", "anima-finetune"}
 ANIMA_FINETUNE_TYPE = "anima-finetune"
@@ -629,13 +632,21 @@ async def normalize_export_config(request: Request):
 
 @router.post("/run")
 async def create_toml_file(request: Request):
+    json_data = await request.body()
+    config: dict = json.loads(json_data.decode("utf-8"))
+    # 训练队列拦截：忙碌时入队、编辑中保存回条目（runner 未启动时恒为 None）
+    intercepted = train_queue.intercept_run(config)
+    if intercepted is not None:
+        return intercepted
+    return await submit_training_config(config)
+
+
+async def submit_training_config(config: dict):
+    """Full /api/run pipeline from a raw GUI config dict (also the queue runner's launch path)."""
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     autosave_dir = os.path.join(os.getcwd(), "config", "autosave")
     os.makedirs(autosave_dir, exist_ok=True)
     toml_file = os.path.join(autosave_dir, f"{timestamp}.toml")
-    json_data = await request.body()
-
-    config: dict = json.loads(json_data.decode("utf-8"))
     train_utils.fix_config_types(config)
     normalize_custom_args(config)
     try:
@@ -773,6 +784,9 @@ async def create_toml_file(request: Request):
     result = process.run_train(toml_file, trainer_file, gpu_ids, suggest_cpu_threads)
 
     return result
+
+
+train_queue.set_submit(submit_training_config)
 
 
 @router.get("/plugins/anima-lora/status")

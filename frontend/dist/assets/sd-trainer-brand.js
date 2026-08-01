@@ -500,3 +500,13 @@
     boot();
   }
 })();
+
+/** Training-queue loader - sd-trainer-queue.js is served no-cache like this file. */
+(function () {
+  if (document.getElementById('sd-trainer-queue-script')) return;
+  var s = document.createElement('script');
+  s.id = 'sd-trainer-queue-script';
+  s.src = '/assets/sd-trainer-queue.js';
+  s.defer = true;
+  document.head.appendChild(s);
+})();

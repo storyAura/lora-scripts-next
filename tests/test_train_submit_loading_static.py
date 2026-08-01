@@ -33,7 +33,8 @@ class TrainSubmitLoadingStaticTests(unittest.TestCase):
         self.assertIn("任务正在提交中，请稍等", layout)
         self.assertIn('duration:0,type:"info"', layout)
         self.assertIn("submitNotice.close()", layout)
-        self.assertIn('ElMessage.success("训练已开始")', layout)
+        # 训练队列：入队/保存修改时后端在 data.queue_message 里带真实提示
+        self.assertIn('ElMessage.success(g.data&&g.data.queue_message||"训练已开始")', layout)
         self.assertNotIn('message:"正在提交训练任务...",duration:2e3', layout)
         self.assertIn("setSubmitButtonLoading(!1)", layout)
         self.assertIn('try{const _=parseParams(n.value(a.value),t);', layout)

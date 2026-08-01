@@ -47,6 +47,7 @@ build/
 
 # Update check cache
 config/.update_cache.json
+config/train_queue.json
 
 # IDE/Tool directories
 .sisyphus/

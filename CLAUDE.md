@@ -243,6 +243,21 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
   In-memory only (lost on restart); only the most recent 16 finished tasks are retained, older
   ones are pruned together with their log buffers (long sessions stay memory-bounded).
   `GET /api/tasks`, `GET /api/tasks/terminate/{id}`.
+- **训练队列**: `mikazuki/train_queue.py` (singleton `train_queue`) + `mikazuki/app/queue_api.py`
+  (`/api/queue*`). The asyncio runner starts at app lifespan and **arms** the `/api/run`
+  intercept — unarmed (tests/scripts calling `create_toml_file` directly) keeps stock behavior.
+  Armed rules: busy or 排队模式 → enqueue raw GUI config; an entry in `editing` → the submit
+  *saves into that entry* and the conveyor halts until manually restarted. Entries launch via
+  `submit_training_config()` (the extracted `/api/run` pipeline), so validation/OOM failures
+  land on the entry (`failed` + error) and the queue continues. State persists in
+  `config/train_queue.json` (gitignored); on restart `active=False`, running→failed. Frontend
+  is `frontend/dist/assets/sd-trainer-queue.js` (no-cache, dynamically loaded by
+  sd-trainer-brand.js — no HTML references, so **no SPA cache-key bump needed** for either).
+  Editing loads the entry config through `localStorage["configs-<pageTrainType>-autosave"]` +
+  hard navigation (the form only reads that key at mount). layout.96d49288.js's success toast
+  was string-patched to prefer `data.queue_message`
+  (`tests/test_train_submit_loading_static.py` guards the exact string;
+  `tests/test_train_queue.py` covers the conveyor).
 - **Log streaming**: `mikazuki/train_log_hub.py` keeps a 15000-line ring buffer per task;
   `GET /api/train/log/stream/{task_id}` is SSE. Snapshot cursors are **absolute** appended-line
   counts so streaming survives ring wrap-around — keep that invariant

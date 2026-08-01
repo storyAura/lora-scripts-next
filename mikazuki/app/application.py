@@ -121,7 +121,10 @@ async def app_startup():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await app_startup()
+    from mikazuki.train_queue import train_queue
+    queue_runner = asyncio.create_task(train_queue.runner())
     yield
+    queue_runner.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -166,6 +169,7 @@ async def add_cache_control_header(request, call_next):
         or path in _IN_PLACE_PATCHED_DIST_ASSETS
         or path.endswith("/assets/tagger-progress.js")
         or path.endswith("/assets/sd-trainer-brand.js")
+        or path.endswith("/assets/sd-trainer-queue.js")
         or path.endswith("/assets/dataset-editor.js")
         or path.endswith("/assets/dataset-editor.css")
         or path.endswith("/assets/dataset-editor-entry.js")
