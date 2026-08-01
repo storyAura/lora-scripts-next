@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**lora-scripts-story-next** (Next Trainer / SD Trainer Next) — a LoRA & finetune training WebUI for Windows, forked from
+**lora-scripts-story-next** (Next Story Trainer; upstream brand: Next Trainer / SD Trainer Next) — a LoRA & finetune training WebUI for Windows, forked from
 `Akegarasu/lora-scripts`. `python gui.py` starts a FastAPI backend (`mikazuki/`), serves a
 **pre-compiled** frontend (`frontend/dist/`), and launches training subprocesses that run a
 **locally modified** copy of kohya `sd-scripts`. Primary target is **Anima** (a DiT +

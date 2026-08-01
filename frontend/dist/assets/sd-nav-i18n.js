@@ -384,10 +384,10 @@
     style.textContent = `
 #${TERMINAL_PANEL_ID} {
   margin: 12px 16px;
-  border: 1px solid #dde3ee;
+  border: 1px solid #f1e5cd;
   border-radius: 12px;
-  background: #f8fafc;
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  box-shadow: 0 8px 30px rgba(17, 9, 0, 0.06);
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-head {
   display: flex;
@@ -395,70 +395,71 @@
   justify-content: space-between;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid #e5eaf3;
+  border-bottom: 1px solid #f1e5cd;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-title {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: #2d2411;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #4f46e5;
-  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.14);
+  background: #574d38;
+  box-shadow: 0 0 0 4px rgba(87, 77, 56, 0.14);
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-title-sub {
   margin-left: 6px;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
-  color: #4f46e5;
-  background: rgba(79, 70, 229, 0.12);
+  color: #574d38;
+  background: #f1e5cd;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-filters {
   display: flex;
   gap: 8px;
 }
 #${TERMINAL_PANEL_ID} .sd-filter-chip {
-  border: 1px solid #cbd5e1;
+  border: 1px solid #dfd4bc;
   border-radius: 999px;
   padding: 4px 10px;
   cursor: pointer;
   background: #fff;
-  color: #475569;
+  color: #847964;
   font-size: 12px;
 }
 #${TERMINAL_PANEL_ID} .sd-filter-chip.active {
-  border-color: #6366f1;
-  color: #3730a3;
-  background: #eef2ff;
+  border-color: #574d38;
+  color: #574d38;
+  background: #f1e5cd;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-body {
   padding: 14px 16px 16px;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 10px;
 }
 #${TERMINAL_PANEL_ID} .sd-card {
   background: #fff;
-  border: 1px solid #dbe2ef;
+  border: 1px solid #f1e5cd;
   border-radius: 10px;
   padding: 10px;
 }
 #${TERMINAL_PANEL_ID} .sd-card-label {
   font-size: 11px;
-  color: #64748b;
+  color: #847964;
   margin-bottom: 6px;
 }
 #${TERMINAL_PANEL_ID} .sd-card-value {
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: #2d2411;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-summary {
   display: grid;
@@ -468,31 +469,32 @@
 }
 #${TERMINAL_PANEL_ID} .sd-summary-item {
   background: #fff;
-  border: 1px solid #dbe2ef;
+  border: 1px solid #f1e5cd;
   border-radius: 10px;
   padding: 10px;
 }
 #${TERMINAL_PANEL_ID} .sd-summary-item b {
   display: block;
   font-size: 11px;
-  color: #64748b;
+  color: #847964;
   margin-bottom: 5px;
 }
 #${TERMINAL_PANEL_ID} .sd-summary-item code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
-  color: #0f172a;
+  color: #2d2411;
   word-break: break-all;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-meta {
-  color: #64748b;
+  color: #847964;
   font-size: 12px;
   margin-bottom: 6px;
 }
+#${TERMINAL_PANEL_ID} .sd-terminal-meta:empty { display: none; }
 #${TERMINAL_PANEL_ID} .sd-terminal-shell {
-  border: 1px solid #1f2937;
+  border: 1px solid #2d2411;
   border-radius: 12px;
-  background: radial-gradient(circle at top right, #192238 0%, #0a1020 45%, #050914 100%);
+  background: radial-gradient(circle at top right, #33270f 0%, #1a130a 45%, #0d0800 100%);
   padding: 0;
   overflow: hidden;
 }
@@ -501,7 +503,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgba(180, 169, 146, 0.22);
 }
 #${TERMINAL_PANEL_ID} .sd-shell-dots {
   display: flex;
@@ -517,7 +519,7 @@
 #${TERMINAL_PANEL_ID} .sd-shell-dots span:nth-child(2) { background: #facc15; }
 #${TERMINAL_PANEL_ID} .sd-shell-dots span:nth-child(3) { background: #34d399; }
 #${TERMINAL_PANEL_ID} .sd-shell-title {
-  color: #94a3b8;
+  color: #b4a992;
   font-size: 11px;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-log {
@@ -529,7 +531,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.45;
-  color: #dbeafe;
+  color: #efe6d2;
   white-space: pre-wrap;
 }
 #${TERMINAL_PANEL_ID} .sd-log-line {
@@ -539,16 +541,16 @@
   margin-top: 2px;
 }
 #${TERMINAL_PANEL_ID} .sd-log-prefix {
-  color: #94a3b8;
+  color: #a89880;
   margin-right: 6px;
 }
 #${TERMINAL_PANEL_ID} .sd-log-level-success { color: #4ade80; }
 #${TERMINAL_PANEL_ID} .sd-log-level-warn { color: #facc15; }
 #${TERMINAL_PANEL_ID} .sd-log-level-error { color: #fb7185; }
-#${TERMINAL_PANEL_ID} .sd-log-level-info { color: #a5b4fc; }
-#${TERMINAL_PANEL_ID} .sd-log-level-normal { color: #dbeafe; }
+#${TERMINAL_PANEL_ID} .sd-log-level-info { color: #dfd4bc; }
+#${TERMINAL_PANEL_ID} .sd-log-level-normal { color: #efe6d2; }
 #${TERMINAL_PANEL_ID} .sd-log-empty {
-  color: #64748b;
+  color: #a89880;
   font-style: italic;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-actions {
@@ -557,15 +559,18 @@
   margin-bottom: 6px;
 }
 #${TERMINAL_PANEL_ID} .sd-terminal-actions button {
-  border: 1px solid #cbd5e1;
+  border: 1px solid #dfd4bc;
   border-radius: 6px;
   padding: 4px 10px;
   background: #fff;
-  color: #334155;
+  color: #574d38;
   cursor: pointer;
 }
-@media (max-width: 1200px) {
-  #${TERMINAL_PANEL_ID} .sd-terminal-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#${TERMINAL_PANEL_ID} .sd-terminal-actions button:hover {
+  background: #fff7df;
+}
+@media (max-width: 719px) {
+  #${TERMINAL_PANEL_ID} .sd-terminal-cards,
   #${TERMINAL_PANEL_ID} .sd-terminal-summary { grid-template-columns: 1fr; }
 }
 `;
@@ -595,14 +600,11 @@
   <div class="sd-terminal-filters">
     <button class="sd-filter-chip active" data-terminal-filter="all">全部</button>
     <button class="sd-filter-chip" data-terminal-filter="train">训练</button>
-    <button class="sd-filter-chip" data-terminal-filter="deploy">部署</button>
     <button class="sd-filter-chip" data-terminal-filter="system">系统</button>
   </div>
 </div>
 <div class="sd-terminal-body">
   <div class="sd-terminal-cards">
-    <div class="sd-card"><div class="sd-card-label">GPU</div><div class="sd-card-value" data-terminal-card="gpu">--</div></div>
-    <div class="sd-card"><div class="sd-card-label">显存</div><div class="sd-card-value" data-terminal-card="vram">--</div></div>
     <div class="sd-card"><div class="sd-card-label">Epoch</div><div class="sd-card-value" data-terminal-card="epoch">--</div></div>
     <div class="sd-card"><div class="sd-card-label">训练速度</div><div class="sd-card-value" data-terminal-card="speed">--</div></div>
   </div>
@@ -614,7 +616,7 @@
     <button type="button" data-terminal-export>导出日志</button>
     <button type="button" data-terminal-clear>清空</button>
   </div>
-  <div class="sd-terminal-meta" data-terminal-install-meta>部署任务：等待中...</div>
+  <div class="sd-terminal-meta" data-terminal-install-meta></div>
   <div class="sd-terminal-meta" data-terminal-train-meta>训练任务：等待中...</div>
   <div class="sd-terminal-shell">
     <div class="sd-shell-bar"><div class="sd-shell-dots"><span></span><span></span><span></span></div><span class="sd-shell-title">unified-train-console.log</span></div>
@@ -798,12 +800,6 @@
   }
 
   function updateTerminalOverview(plugin, latestTrain) {
-    const gpuRaw = getDeep(plugin, ["facts", "audit", "facts", "anima", "gpu"], "--");
-    const gpu = String(gpuRaw || "--");
-    const vramMatch = gpu.match(/\(([^)]+)\)/);
-    const vram = vramMatch ? vramMatch[1] : "--";
-    setCard("gpu", gpu.replace(/\s*\([^)]*\)\s*$/, "") || "--");
-    setCard("vram", vram);
     setCard("epoch", terminalMetricStore.epoch || "--");
     setCard("speed", terminalMetricStore.speed || "--");
 
@@ -875,7 +871,8 @@
         setTerminalMeta("install", `部署任务：task=${installTaskId} · ${statusText}`);
         connectTerminalStream("deploy", installTaskId, true);
       } else {
-        setTerminalMeta("install", `部署任务：插件状态 ${plugin.state || "unknown"}`);
+        // no deploy task → hide the line entirely (css :empty)
+        setTerminalMeta("install", "");
       }
 
       if (latestTrain) {

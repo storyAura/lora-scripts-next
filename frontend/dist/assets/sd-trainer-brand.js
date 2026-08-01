@@ -1,10 +1,10 @@
 /**
- * Version chip next to the "Next Trainer" sidebar title (reads /api/version).
+ * Version chip next to the "Next Story Trainer" sidebar title (reads /api/version).
  */
 (function () {
   const VERSION_URL = "/api/version";
   const CHIP_ID = "sd-brand-version-chip";
-  const BRAND_TITLE = "Next Trainer";
+  const BRAND_TITLE = "Next Story Trainer";
   const GAP_PX = 6;
   const OFFSET_Y_PX = 3;
 
@@ -37,7 +37,7 @@
     if (!sidebar) return null;
     return (
       sidebar.querySelector("li:first-child > a.sidebar-item.sidebar-heading[href='/']") ||
-      sidebar.querySelector('a.sidebar-item.sidebar-heading[aria-label="Next Trainer"]')
+      sidebar.querySelector('a.sidebar-item.sidebar-heading[aria-label="Next Story Trainer"]')
     );
   }
 
@@ -91,7 +91,7 @@
       chip = document.createElement("div");
       chip.id = CHIP_ID;
       chip.className = "sd-brand-version-chip";
-      chip.setAttribute("title", "Next Trainer / SD-Trainer 版本号");
+      chip.setAttribute("title", "Next Story Trainer / SD-Trainer 版本号");
       document.body.appendChild(chip);
     }
     chip.textContent = "v" + version;
