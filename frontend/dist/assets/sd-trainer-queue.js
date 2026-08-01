@@ -126,10 +126,15 @@ html.dark #${NAV_ID} .sd-queue-badge.live { background: #dfd4bc; color: #2d2411;
 }
 
 #${OVERLAY_ID} {
-  position: fixed; inset: 0; z-index: 3500; display: flex; flex-direction: column;
+  /* embedded page feel: covers the content area only; JS keeps the left
+     edge aligned to the live sidebar so it stays visible and clickable */
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 1800; display: flex; flex-direction: column;
   background: #ffffff; color: #2d2411;
   font-family: inherit;
 }
+#${OVERLAY_ID} .sdq-toolbar, #${OVERLAY_ID} .sdq-speed,
+#${OVERLAY_ID} .sdq-list, #${OVERLAY_ID} .sdq-hints { max-width: 1160px; }
 html.dark #${OVERLAY_ID} { background: #1a130a; color: #f1e5cd; }
 #${OVERLAY_ID} .sdq-head {
   display: flex; align-items: center; gap: 14px; padding: 16px 26px;
@@ -443,11 +448,26 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     document.body.appendChild(overlay);
   }
 
+  function positionOverlay() {
+    const overlay = document.getElementById(OVERLAY_ID);
+    if (!overlay || !overlayOpen) return;
+    const sidebar = document.querySelector("aside.sidebar");
+    const left = sidebar ? Math.max(0, Math.round(sidebar.getBoundingClientRect().right)) : 0;
+    overlay.style.left = left + "px";
+  }
+
+  function setNavActive(on) {
+    const a = document.querySelector(`#${NAV_ID} a[href="#sd-queue"]`);
+    if (a) a.classList.toggle("active", on);
+  }
+
   function openOverlay() {
     buildOverlay();
     const overlay = document.getElementById(OVERLAY_ID);
     overlay.style.display = "flex";
     overlayOpen = true;
+    positionOverlay();
+    setNavActive(true);
     document.body.style.overflow = "hidden";
     refresh();
   }
@@ -456,6 +476,7 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     const overlay = document.getElementById(OVERLAY_ID);
     if (overlay) overlay.style.display = "none";
     overlayOpen = false;
+    setNavActive(false);
     document.body.style.overflow = "";
   }
 
@@ -574,7 +595,11 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     ensureNav();
     renderNavBadge();
     relabelStartButtons();
-    if (overlayOpen) renderOverlay();
+    if (overlayOpen) {
+      setNavActive(true);
+      positionOverlay();
+      renderOverlay();
+    }
   }
 
   function boot() {
@@ -582,6 +607,18 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     injectStyle();
     ensureNav();
     refresh();
+    window.addEventListener("resize", positionOverlay);
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && overlayOpen) closeOverlay();
+    });
+    // clicking any other sidebar link while the panel is open: fold the panel
+    // so the SPA navigation underneath stays visible (embedded-page behavior)
+    document.addEventListener("click", (ev) => {
+      if (!overlayOpen || !ev.target.closest) return;
+      const link = ev.target.closest(".sidebar a");
+      if (link && link.getAttribute("href") !== "#sd-queue") closeOverlay();
+    }, true);
+    if (location.hash === "#sd-queue") openOverlay();
     if (!pollTimer) pollTimer = setInterval(refresh, POLL_MS);
     const root = document.querySelector("#app");
     if (root) {
