@@ -85,43 +85,50 @@ class EstimateTests(unittest.TestCase):
 
 
 class InterceptTests(unittest.TestCase):
-    def test_disarmed_and_idle_pass_through(self):
+    def test_disarmed_passes_through(self):
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp), armed=False)
             self.assertIsNone(queue.intercept_run(dict(BASE_CONFIG)))
-            queue._armed = True
-            self.assertIsNone(queue.intercept_run(dict(BASE_CONFIG)))
             self.assertEqual(queue.entries, [])
 
-    def test_busy_enqueues_and_activates(self):
+    def test_idle_submit_enqueues_and_auto_starts(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tasks = {"t0": fake_task("RUNNING")}
-            queue = make_queue(Path(tmp), tasks=tasks)
+            queue = make_queue(Path(tmp))
             response = queue.intercept_run(dict(BASE_CONFIG))
             self.assertEqual(response.status, "success")
             self.assertTrue(response.data["queued"])
-            self.assertIn("加入训练队列", response.data["queue_message"])
-            self.assertTrue(queue.active)
+            self.assertIn("即将自动开始", response.data["queue_message"])
+            self.assertTrue(queue.active, "idle submit must start the conveyor")
             self.assertEqual(queue.entries[0]["status"], "queued")
             self.assertEqual(queue.entries[0]["name"], "my-char")
 
-    def test_queue_mode_enqueues_while_idle_without_activating(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            queue = make_queue(Path(tmp))
-            queue.set_mode(True)
-            response = queue.intercept_run(dict(BASE_CONFIG))
-            self.assertEqual(response.status, "success")
-            self.assertFalse(queue.active)
-
-    def test_editing_entry_receives_the_submit(self):
+    def test_busy_submit_enqueues_behind_running_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = {"t0": fake_task("RUNNING")}
             queue = make_queue(Path(tmp), tasks=tasks)
+            response = queue.intercept_run(dict(BASE_CONFIG))
+            self.assertIn("完成后自动开始", response.data["queue_message"])
+            self.assertTrue(queue.active)
+
+    def test_paused_queue_holds_new_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = make_queue(Path(tmp))
+            queue.stop()
+            response = queue.intercept_run(dict(BASE_CONFIG))
+            self.assertEqual(response.status, "success")
+            self.assertIn("暂停", response.data["queue_message"])
+            self.assertFalse(queue.active)
+            self.assertTrue(queue.user_paused)
+
+    def test_editing_entry_receives_the_submit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = make_queue(Path(tmp))
+            queue.stop()
             queue.intercept_run(dict(BASE_CONFIG))
             entry_id = queue.entries[0]["id"]
-            tasks.clear()  # queue must halt for editing even when idle
             self.assertEqual(queue.set_editing(entry_id, True).status, "success")
             self.assertFalse(queue.active)
+            self.assertTrue(queue.user_paused)
 
             updated = dict(BASE_CONFIG, output_name="my-char-v2")
             response = queue.intercept_run(updated)
@@ -132,10 +139,22 @@ class InterceptTests(unittest.TestCase):
             self.assertEqual(entry["config"]["output_name"], "my-char-v2")
             self.assertFalse(queue.active, "saved edit must not auto-start the queue")
 
+    def test_submit_while_editing_saves_and_does_not_resume(self):
+        """While an entry is being edited, any submit saves into it and the conveyor stays halted."""
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = make_queue(Path(tmp))
+            queue.intercept_run(dict(BASE_CONFIG))
+            queue.set_editing(queue.entries[0]["id"], True)
+            queue.intercept_run(dict(BASE_CONFIG, output_name="second"))
+            self.assertEqual(len(queue.entries), 1, "submit during edit updates, not appends")
+            self.assertEqual(queue.entries[0]["name"], "second")
+            self.assertEqual(queue.entries[0]["status"], "queued")
+            self.assertFalse(queue.active)
+
     def test_editing_is_exclusive(self):
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
-            queue.set_mode(True)
+            queue.stop()
             queue.intercept_run(dict(BASE_CONFIG))
             queue.intercept_run(dict(BASE_CONFIG, output_name="second"))
             first, second = queue.entries
@@ -146,17 +165,16 @@ class InterceptTests(unittest.TestCase):
 class ConveyorTests(unittest.TestCase):
     def _queued_queue(self, tmp, tasks, names=("a", "b")):
         queue = make_queue(Path(tmp), tasks=tasks, tail_lines=["50/50 [00:25<00:00, 2.00it/s]"])
-        queue.set_mode(True)
+        queue.stop()  # hold entries while we build the queue
         for name in names:
             queue.intercept_run(dict(BASE_CONFIG, output_name=name))
-        queue.set_mode(False)
         return queue
 
     def test_tick_launches_next_and_marks_result(self):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = {}
             queue = self._queued_queue(tmp, tasks)
-            self.assertIsNone(queue.tick(), "inactive queue must not launch")
+            self.assertIsNone(queue.tick(), "paused queue must not launch")
             queue.start()
             launch = queue.tick()
             self.assertEqual(launch["name"], "a")
@@ -175,6 +193,7 @@ class ConveyorTests(unittest.TestCase):
             tasks["t1"] = fake_task("FINISHED")
             next_launch = queue.tick()
             self.assertEqual(queue.entries[0]["status"], "done")
+            self.assertIsNotNone(queue.entries[0]["finished_at"])
             self.assertEqual(next_launch["name"], "b")
             self.assertAlmostEqual(queue.last_speed["it_s"], 2.0)
             self.assertEqual(queue.last_speed["lora_type"], "lokr")
@@ -205,9 +224,10 @@ class ConveyorTests(unittest.TestCase):
             tasks["t1"] = fake_task("FINISHED")
             self.assertIsNone(queue.tick(), "editing must block the next launch")
             self.assertFalse(queue.active)
+            self.assertTrue(queue.user_paused)
             self.assertEqual(queue.entries[0]["status"], "done")
 
-    def test_drained_queue_deactivates(self):
+    def test_drained_queue_deactivates_but_stays_unpaused(self):
         with tempfile.TemporaryDirectory() as tmp:
             tasks = {}
             queue = self._queued_queue(tmp, tasks, names=("only",))
@@ -217,6 +237,10 @@ class ConveyorTests(unittest.TestCase):
             tasks["t1"] = fake_task("FINISHED")
             self.assertIsNone(queue.tick())
             self.assertFalse(queue.active)
+            self.assertFalse(queue.user_paused, "drain is not a user pause")
+            # a new submit after drain must auto-start again
+            queue.intercept_run(dict(BASE_CONFIG, output_name="next"))
+            self.assertTrue(queue.active)
 
     def test_launch_failure_marks_entry_failed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -248,14 +272,14 @@ class ConveyorTests(unittest.TestCase):
             queue.pause(queue.entries[0]["id"])
             queue.start(include_paused=True)
             self.assertEqual(queue.entries[0]["status"], "queued")
+            self.assertFalse(queue.user_paused)
 
 
 class EntryOpTests(unittest.TestCase):
     def _one_entry_queue(self, tmp, tasks=None):
         queue = make_queue(Path(tmp), tasks=tasks if tasks is not None else {})
-        queue.set_mode(True)
+        queue.stop()
         queue.intercept_run(dict(BASE_CONFIG))
-        queue.set_mode(False)
         return queue
 
     def test_running_entry_cannot_be_deleted(self):
@@ -268,23 +292,24 @@ class EntryOpTests(unittest.TestCase):
     def test_reorder_keeps_unknown_ids_out(self):
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
-            queue.set_mode(True)
+            queue.stop()
             for name in ("a", "b", "c"):
                 queue.intercept_run(dict(BASE_CONFIG, output_name=name))
             ids = [e["id"] for e in queue.entries]
             queue.reorder([ids[2], "bogus", ids[0]])
             self.assertEqual([e["name"] for e in queue.entries], ["c", "a", "b"])
 
-    def test_start_entry_moves_to_front(self):
+    def test_start_entry_moves_to_front_and_unpauses(self):
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
-            queue.set_mode(True)
+            queue.stop()
             for name in ("a", "b"):
                 queue.intercept_run(dict(BASE_CONFIG, output_name=name))
             response = queue.start_entry(queue.entries[1]["id"])
             self.assertEqual(response.status, "success")
             self.assertEqual(queue.entries[0]["name"], "b")
             self.assertTrue(queue.active)
+            self.assertFalse(queue.user_paused)
 
     def test_start_entry_rejected_while_busy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -306,18 +331,17 @@ class PersistenceTests(unittest.TestCase):
             path = Path(tmp) / "queue.json"
             first = TrainQueue(path=path, tasks_source=dict, log_tail=lambda *a: [])
             first._armed = True
-            first.set_mode(True)
             first.intercept_run(dict(BASE_CONFIG))
-            first.start()
             first.tick()  # entry now running
             self.assertEqual(first.entries[0]["status"], "running")
+            first.stop()  # persist the user pause too
 
             second = TrainQueue(path=path, tasks_source=dict, log_tail=lambda *a: [])
             snapshot = second.snapshot()
             self.assertFalse(snapshot["active"])
+            self.assertTrue(snapshot["user_paused"], "user pause survives restart")
             self.assertEqual(snapshot["entries"][0]["status"], "failed")
             self.assertIn("服务重启", snapshot["entries"][0]["error"])
-            self.assertTrue(snapshot["queue_mode"], "queue_mode survives restart")
 
     def test_corrupt_state_starts_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -326,24 +350,29 @@ class PersistenceTests(unittest.TestCase):
             queue = TrainQueue(path=path, tasks_source=dict, log_tail=lambda *a: [])
             self.assertEqual(queue.snapshot()["entries"], [])
 
-    def test_snapshot_hides_config_and_computes_eta(self):
+    def test_snapshot_hides_config_and_computes_eta_and_duration(self):
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
-            queue.set_mode(True)
+            queue.stop()
             queue.intercept_run(dict(BASE_CONFIG))
-            queue.entries[0]["steps"] = 600
+            entry = queue.entries[0]
+            entry["steps"] = 600
+            entry["started_at"] = "2026-08-01T10:00:00"
+            entry["finished_at"] = "2026-08-01T10:42:30"
             queue.last_speed = {"it_s": 2.0, "name": "prev", "lora_type": "lora"}
             view = queue.snapshot()["entries"][0]
             self.assertNotIn("config", view)
             self.assertEqual(view["eta_seconds"], 300)
+            self.assertEqual(view["duration_seconds"], 2550)
 
     def test_state_file_is_valid_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
-            queue.set_mode(True)
+            queue.stop()
             queue.intercept_run(dict(BASE_CONFIG))
             raw = json.loads((Path(tmp) / "queue.json").read_text(encoding="utf-8"))
             self.assertEqual(raw["entries"][0]["name"], "my-char")
+            self.assertTrue(raw["user_paused"])
 
 
 if __name__ == "__main__":

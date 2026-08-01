@@ -142,7 +142,9 @@ class TrainQueue:
         self._last_speed_task_id: Optional[str] = None
         self.entries: List[Dict[str, Any]] = []
         self.active = False
-        self.queue_mode = False
+        # user's explicit pause switch: while True, new submits still enqueue
+        # but the conveyor will not start until 「开始队列」
+        self.user_paused = False
         self.halt_reason = ""
         self.last_speed: Optional[Dict[str, Any]] = None
 
@@ -168,7 +170,7 @@ class TrainQueue:
             return
         entries = raw.get("entries")
         self.entries = entries if isinstance(entries, list) else []
-        self.queue_mode = bool(raw.get("queue_mode"))
+        self.user_paused = bool(raw.get("user_paused"))
         self.last_speed = raw.get("last_speed") if isinstance(raw.get("last_speed"), dict) else None
         interrupted = False
         for entry in self.entries:
@@ -189,7 +191,7 @@ class TrainQueue:
     def _save(self) -> None:
         payload = {
             "entries": self.entries,
-            "queue_mode": self.queue_mode,
+            "user_paused": self.user_paused,
             "last_speed": self.last_speed,
         }
         try:
@@ -246,6 +248,17 @@ class TrainQueue:
             "finished_at": None,
         }
 
+    @staticmethod
+    def _duration_seconds(entry: Dict[str, Any]) -> Optional[int]:
+        started, finished = entry.get("started_at"), entry.get("finished_at")
+        if not started or not finished:
+            return None
+        try:
+            seconds = (datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds()
+        except (TypeError, ValueError):
+            return None
+        return round(seconds) if seconds >= 0 else None
+
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
             self._ensure_loaded()
@@ -255,12 +268,13 @@ class TrainQueue:
                 view = {k: v for k, v in entry.items() if k != "config"}
                 steps = entry.get("steps")
                 view["eta_seconds"] = round(steps / it_s) if steps and it_s else None
+                view["duration_seconds"] = self._duration_seconds(entry)
                 entries.append(view)
             running = next((e for e in self.entries if e.get("status") == "running"), None)
             editing = next((e for e in self.entries if e.get("status") == "editing"), None)
             return {
                 "active": self.active,
-                "queue_mode": self.queue_mode,
+                "user_paused": self.user_paused,
                 "busy": self.busy(),
                 "halt_reason": self.halt_reason,
                 "last_speed": self.last_speed,
@@ -304,24 +318,23 @@ class TrainQueue:
                     },
                 )
 
+            # every submit goes through the queue; unless the user paused it,
+            # the conveyor (re)starts so an idle submit begins within seconds
             try:
                 tasks = self._tasks_source()
             except Exception:
                 tasks = {}
             running_busy = self._busy_locked(tasks)
-            waiting = any(e.get("status") == "queued" for e in self.entries)
-            if not (self.queue_mode or running_busy or (self.active and waiting)):
-                return None
-
             entry = self._new_entry(config)
             self.entries.append(entry)
-            if running_busy and not self.queue_mode:
-                # 「开始训练」 while busy = queue it and continue automatically
+            position = sum(1 for e in self.entries if e.get("status") == "queued")
+            if self.user_paused:
+                suffix = "。队列处于暂停中，请到训练队列点「开始队列」"
+            else:
                 self.active = True
                 self.halt_reason = ""
-            position = sum(1 for e in self.entries if e.get("status") == "queued")
+                suffix = "，当前任务完成后自动开始" if running_busy else "，即将自动开始"
             self._save()
-            suffix = "，当前任务完成后自动开始" if self.active else "，队列未启动，请到训练队列点「开始队列」"
             message = f"已加入训练队列（第 {position} 位）{suffix}"
             return _success(message, data={"queued": True, "entry_id": entry["id"], "queue_message": message})
 
@@ -386,8 +399,10 @@ class TrainQueue:
                 if entry.get("status") not in EDITABLE_STATUSES:
                     return _fail("正在训练或排队启动中的任务不能编辑")
                 entry["status"] = "editing"
-                # per spec: while editing, a finishing task must NOT trigger the next one
+                # per spec: while editing, a finishing task must NOT trigger the
+                # next one — and new submits must not resume the conveyor either
                 self.active = False
+                self.user_paused = True
                 self.halt_reason = "有任务处于编辑状态，队列已暂停；保存后请手动开始"
             else:
                 if entry.get("status") != "editing":
@@ -417,6 +432,7 @@ class TrainQueue:
             entry["updated_at"] = _now_iso()
             self.entries.remove(entry)
             self.entries.insert(0, entry)
+            self.user_paused = False
             self.active = True
             self.halt_reason = ""
             self._save()
@@ -433,28 +449,24 @@ class TrainQueue:
                 for entry in self.entries:
                     if entry.get("status") == "paused":
                         entry["status"] = "queued"
-            if not any(e.get("status") in ("queued", "running") for e in self.entries):
-                return _fail("队列中没有可开始的任务")
+            self.user_paused = False
             self.active = True
             self.halt_reason = ""
             self._save()
-            return _success("队列已开始，按顺序自动训练", data=self.snapshot())
+            if any(e.get("status") in ("queued", "running") for e in self.entries):
+                message = "队列已开始，按顺序自动训练"
+            else:
+                message = "队列已就绪：提交训练任务后自动按序开始"
+            return _success(message, data=self.snapshot())
 
     def stop(self):
         with self._lock:
             self._ensure_loaded()
+            self.user_paused = True
             self.active = False
             self.halt_reason = "已手动暂停队列（正在训练的任务不受影响）"
             self._save()
             return _success("队列已暂停，当前训练继续，不再自动开始下一个", data=self.snapshot())
-
-    def set_mode(self, enabled: bool):
-        with self._lock:
-            self._ensure_loaded()
-            self.queue_mode = bool(enabled)
-            self._save()
-            message = "排队模式已开启：点「开始训练」将直接加入队列" if self.queue_mode else "排队模式已关闭"
-            return _success(message, data=self.snapshot())
 
     def clear_finished(self):
         with self._lock:
@@ -547,6 +559,7 @@ class TrainQueue:
 
             if self.active and any(e.get("status") == "editing" for e in self.entries):
                 self.active = False
+                self.user_paused = True
                 self.halt_reason = "有任务处于编辑状态，队列已暂停；保存后请手动开始"
                 changed = True
 
@@ -555,7 +568,7 @@ class TrainQueue:
                 launch = next((e for e in self.entries if e.get("status") == "queued"), None)
                 if launch is None:
                     self.active = False
-                    self.halt_reason = "队列已全部执行完毕"
+                    self.halt_reason = "队列已全部执行完毕，提交新任务会自动开始"
                     changed = True
                 else:
                     launch["status"] = "running"

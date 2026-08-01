@@ -34,12 +34,6 @@ async def queue_stop():
     return train_queue.stop()
 
 
-@router.post("/mode")
-async def queue_mode(request: Request):
-    payload = await _json_body(request)
-    return train_queue.set_mode(bool(payload.get("enabled")))
-
-
 @router.post("/reorder")
 async def queue_reorder(request: Request):
     payload = await _json_body(request)

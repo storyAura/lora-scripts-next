@@ -246,8 +246,12 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 - **训练队列**: `mikazuki/train_queue.py` (singleton `train_queue`) + `mikazuki/app/queue_api.py`
   (`/api/queue*`). The asyncio runner starts at app lifespan and **arms** the `/api/run`
   intercept — unarmed (tests/scripts calling `create_toml_file` directly) keeps stock behavior.
-  Armed rules: busy or 排队模式 → enqueue raw GUI config; an entry in `editing` → the submit
-  *saves into that entry* and the conveyor halts until manually restarted. Entries launch via
+  Armed rules: **every submit enqueues** (queue-first is the default; idle submits auto-start
+  the conveyor unless `user_paused`); an entry in `editing` → the submit *saves into that
+  entry* and the conveyor halts (`user_paused=True`) until manually restarted. done/failed
+  entries stay as history (finish time + `duration_seconds` in the snapshot) until deleted or
+  「归档清除」. Note: armed `/api/run` responses carry `queue_message`, **not** `task_id`
+  (launch is async via the runner). Entries launch via
   `submit_training_config()` (the extracted `/api/run` pipeline), so validation/OOM failures
   land on the entry (`failed` + error) and the queue continues. State persists in
   `config/train_queue.json` (gitignored); on restart `active=False`, running→failed. Frontend

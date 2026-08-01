@@ -163,7 +163,12 @@ html.dark #${OVERLAY_ID} .sdq-close:hover { background: #2d2411; }
 html.dark #${OVERLAY_ID} .sdq-btn { background: transparent; color: #dfd4bc; border-color: #574d38; }
 html.dark #${OVERLAY_ID} .sdq-btn:hover { background: #2d2411; }
 html.dark #${OVERLAY_ID} .sdq-btn.primary { background: #dfd4bc; border-color: #dfd4bc; color: #2d2411; }
-#${OVERLAY_ID} .sdq-mode { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #847964; cursor: pointer; user-select: none; }
+#${OVERLAY_ID} .sdq-history-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 26px 0 10px; padding-top: 14px; font-size: 13px; font-weight: 600; color: #847964;
+  border-top: 1px dashed #dfd4bc;
+}
+html.dark #${OVERLAY_ID} .sdq-history-head { border-color: #574d38; color: #b4a992; }
 #${OVERLAY_ID} .sdq-speed {
   border: 1px solid #f1e5cd; background: #fff7df; color: #574d38;
   border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.7; margin-bottom: 16px;
@@ -303,8 +308,8 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     let wanted;
     if (state.editing_entry_id) {
       wanted = en ? "Save to queue" : "保存修改到队列";
-    } else if (state.queue_mode || state.busy ||
-      (state.active && (state.entries || []).some((e) => e.status === "queued"))) {
+    } else if (state.busy ||
+      (state.entries || []).some((e) => e.status === "queued")) {
       wanted = en ? "Add to training queue" : "加入训练队列";
     } else {
       wanted = en ? "Start training" : "开始训练";
@@ -324,6 +329,21 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     if (minutes < 1) return "不到 1 分钟";
     if (minutes < 60) return `约 ${minutes} 分钟`;
     return `约 ${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+  }
+
+  function humanDuration(seconds) {
+    if (seconds == null || seconds < 0) return null;
+    if (seconds < 60) return `${Math.max(1, Math.round(seconds))} 秒`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} 分 ${Math.round(seconds % 60)} 秒`;
+    return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+  }
+
+  function elapsedSince(iso) {
+    if (!iso) return null;
+    const start = new Date(iso).getTime();
+    if (!isFinite(start)) return null;
+    return humanDuration((Date.now() - start) / 1000);
   }
 
   function entryOps(entry) {
@@ -356,14 +376,44 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     const bits = [];
     if (entry.train_type) bits.push(escapeHtml(entry.train_type));
     if (entry.lora_type) bits.push(escapeHtml(entry.lora_type));
-    if (entry.images) bits.push(`图片×重复 ${entry.images}`);
-    if (entry.steps) bits.push(`预计 ${entry.steps} 步`);
-    const eta = humanEta(entry.eta_seconds);
-    if (eta) bits.push(`预计时长 ${eta}（仅供参考）`);
-    else if (entry.steps) bits.push("预计时长：暂无速度参考");
-    if (entry.status === "running" && entry.started_at) bits.push(`开始于 ${escapeHtml(entry.started_at)}`);
-    if (entry.status === "done" && entry.finished_at) bits.push(`完成于 ${escapeHtml(entry.finished_at)}`);
+    const terminal = entry.status === "done" || entry.status === "failed";
+    if (!terminal) {
+      if (entry.images) bits.push(`图片×重复 ${entry.images}`);
+      if (entry.steps) bits.push(`预计 ${entry.steps} 步`);
+      const eta = humanEta(entry.eta_seconds);
+      if (eta) bits.push(`预计时长 ${eta}（仅供参考）`);
+      else if (entry.steps) bits.push("预计时长：暂无速度参考");
+    }
+    if (entry.status === "running" && entry.started_at) {
+      const elapsed = elapsedSince(entry.started_at);
+      bits.push(`开始于 ${escapeHtml(String(entry.started_at).replace("T", " "))}`);
+      if (elapsed) bits.push(`已训练 ${elapsed}`);
+    }
+    if (terminal && entry.finished_at) {
+      const label = entry.status === "done" ? "完成于" : "结束于";
+      bits.push(`${label} ${escapeHtml(String(entry.finished_at).replace("T", " "))}`);
+      const duration = humanDuration(entry.duration_seconds);
+      if (duration) bits.push(`耗时 ${duration}`);
+    }
     return bits.join(" · ");
+  }
+
+  function entryHtml(entry, idx) {
+    const st = STATUS_META[entry.status] || { label: entry.status, cls: "queued" };
+    const terminal = entry.status === "done" || entry.status === "failed";
+    const draggable = !terminal && entry.status !== "running";
+    return `
+<li class="sdq-item${terminal ? " is-terminal" : ""}" data-id="${entry.id}" draggable="${draggable}">
+  ${draggable ? `<span class="sdq-handle" title="拖动调整顺序">⠿</span>` : ""}
+  ${idx != null ? `<span class="sdq-idx">${idx + 1}</span>` : ""}
+  <div class="sdq-main">
+    <span class="sdq-name">${escapeHtml(entry.name)}</span>
+    <span class="sdq-chips"><span class="sdq-chip st-${st.cls}">${st.label}</span></span>
+    <div class="sdq-meta">${entryMeta(entry)}</div>
+    ${entry.error ? `<div class="sdq-error">${escapeHtml(entry.error)}</div>` : ""}
+  </div>
+  <div class="sdq-ops">${entryOps(entry)}</div>
+</li>`;
   }
 
   function renderOverlay() {
@@ -371,22 +421,28 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     if (!overlay || !state || dragging) return;
 
     const s = state;
-    const stateText = s.active
-      ? "队列进行中：任务完成后自动开始下一个"
-      : (s.halt_reason || "队列未启动");
+    let stateText;
+    if (s.active) {
+      stateText = "队列进行中：任务完成后自动开始下一个";
+    } else if (s.user_paused) {
+      stateText = s.halt_reason || "队列已暂停：新任务只入队不开始";
+    } else {
+      stateText = "队列空闲：提交训练任务后自动按序开始";
+    }
     overlay.querySelector(".sdq-state").className = "sdq-state" + (s.active ? " on" : "");
     overlay.querySelector(".sdq-state-text").textContent = stateText;
 
+    const entries = s.entries || [];
+    const pending = entries.filter((e) => e.status !== "done" && e.status !== "failed");
+    const history = entries.filter((e) => e.status === "done" || e.status === "failed").reverse();
+
     const toolbar = overlay.querySelector(".sdq-toolbar");
-    const anyPaused = (s.entries || []).some((e) => e.status === "paused");
-    const anyFinished = (s.entries || []).some((e) => e.status === "done" || e.status === "failed");
+    const anyPaused = pending.some((e) => e.status === "paused");
     toolbar.innerHTML = `
       ${s.active
         ? `<button class="sdq-btn" data-act="queue-stop">⏸ 暂停队列</button>`
         : `<button class="sdq-btn primary" data-act="queue-start">▶ 开始队列</button>`}
       ${anyPaused ? `<button class="sdq-btn" data-act="queue-start-all">▶ 恢复全部并开始</button>` : ""}
-      <label class="sdq-mode"><input type="checkbox" data-act="queue-mode" ${s.queue_mode ? "checked" : ""}> 排队模式：空闲时点「开始训练」也加入队列</label>
-      ${anyFinished ? `<button class="sdq-btn" data-act="clear-finished">清除已结束</button>` : ""}
     `;
 
     const speed = s.last_speed;
@@ -396,27 +452,22 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
       : "暂无速度参考：完成一次训练后会自动记录上一任务的 it/s，用于折算预计时长（LoRA / LoKr 等算法速度不同，仅供参考）。";
 
     const list = overlay.querySelector(".sdq-list");
-    const entries = s.entries || [];
-    if (!entries.length) {
-      list.innerHTML = `<li class="sdq-empty">队列还是空的喵。<br>在训练页配置好参数后点「开始训练」：训练中会自动排队；<br>也可以先在上方开启「排队模式」，空闲时点「开始训练」直接加入队列。</li>`;
+    if (!pending.length) {
+      list.innerHTML = `<li class="sdq-empty">队列是空的喵。<br>在训练页配置好参数后点「开始训练」即可入队并自动开始；<br>连续多次提交就会自动排成队，按顺序训练。</li>`;
     } else {
-      list.innerHTML = entries.map((entry, idx) => {
-        const st = STATUS_META[entry.status] || { label: entry.status, cls: "queued" };
-        const terminal = entry.status === "done" || entry.status === "failed";
-        const draggable = entry.status !== "running";
-        return `
-<li class="sdq-item${terminal ? " is-terminal" : ""}" data-id="${entry.id}" draggable="${draggable}">
-  <span class="sdq-handle" title="拖动调整顺序">⠿</span>
-  <span class="sdq-idx">${idx + 1}</span>
-  <div class="sdq-main">
-    <span class="sdq-name">${escapeHtml(entry.name)}</span>
-    <span class="sdq-chips"><span class="sdq-chip st-${st.cls}">${st.label}</span></span>
-    <div class="sdq-meta">${entryMeta(entry)}</div>
-    ${entry.error ? `<div class="sdq-error">${escapeHtml(entry.error)}</div>` : ""}
-  </div>
-  <div class="sdq-ops">${entryOps(entry)}</div>
-</li>`;
-      }).join("");
+      list.innerHTML = pending.map((entry, idx) => entryHtml(entry, idx)).join("");
+    }
+
+    const historyBox = overlay.querySelector(".sdq-history");
+    if (!history.length) {
+      historyBox.innerHTML = "";
+    } else {
+      historyBox.innerHTML = `
+<div class="sdq-history-head">
+  <span>历史记录（${history.length}）</span>
+  <button class="sdq-op" data-act="clear-finished">归档清除全部历史</button>
+</div>
+<ul class="sdq-list">${history.map((entry) => entryHtml(entry, null)).join("")}</ul>`;
     }
   }
 
@@ -436,10 +487,12 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
   <div class="sdq-toolbar"></div>
   <div class="sdq-speed">载入中…</div>
   <ul class="sdq-list"></ul>
+  <div class="sdq-history"></div>
   <div class="sdq-hints">
+    · 所有训练任务都经由队列：空闲时提交会立即自动开始，忙碌时自动排队，完成后自动接跑下一个。<br>
     · 预计时长 = 预计步数 ÷ 上一任务实测 it/s。LoRA 与 LoKr 等算法速度差异明显，仅供参考。<br>
-    · 队列忙碌或编辑中时，训练页的「开始训练」按钮会自动变为「加入训练队列」/「保存修改到队列」。<br>
     · 「编辑」会把该任务参数载入对应训练页表单（当前表单未保存内容会被覆盖）；改完点「保存修改到队列」，保存后队列保持暂停，需手动开始。<br>
+    · 完成/失败的任务会留在历史记录里（含完成时间与耗时），可单个删除、整体归档清除，或放着不管。<br>
     · 想停下正在训练的任务：先「暂停队列」再到日志页终止，避免队列自动接跑下一个。正在训练的任务无法在此暂停或删除。
   </div>
 </div>`;
@@ -492,8 +545,11 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
       case "queue-start": action("POST", "/api/queue/start", {}); break;
       case "queue-start-all": action("POST", "/api/queue/start", { include_paused: true }); break;
       case "queue-stop": action("POST", "/api/queue/stop"); break;
-      case "queue-mode": action("POST", "/api/queue/mode", { enabled: target.checked }); break;
-      case "clear-finished": action("POST", "/api/queue/clear-finished"); break;
+      case "clear-finished":
+        if (confirm("归档清除全部历史记录？（不影响排队和正在训练的任务）")) {
+          action("POST", "/api/queue/clear-finished");
+        }
+        break;
       case "pause": action("POST", `/api/queue/entries/${id}/pause`); break;
       case "resume": action("POST", `/api/queue/entries/${id}/resume`); break;
       case "requeue": action("POST", `/api/queue/entries/${id}/requeue`); break;
@@ -560,6 +616,7 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     overlay.addEventListener("dragover", (ev) => {
       const item = ev.target.closest(".sdq-item");
       if (!item || !draggedId) return;
+      if (item.parentNode !== list()) return; // pending list only, not history
       ev.preventDefault();
       ev.dataTransfer.dropEffect = "move";
       const dragged = list().querySelector(`.sdq-item[data-id="${draggedId}"]`);
