@@ -37,11 +37,11 @@ python scripts/bump_spa_asset_cache_key.py         # after editing frontend/dist
 
 ### Known-failing tests (pre-existing, not your change)
 
-unittest baseline as of 2026-07-31 (462 tests): **4 failures + 1 skipped** —
+unittest baseline as of 2026-08-01 (490 tests): **4 failures + 1 skipped** —
 `test_anima_backend_upstream` (3, expects `vendor/sd-scripts` to be a git submodule) and
 `test_anima_fast_integration_static` (1, dist still pins `sd-trainer-brand.js?v=2.8.35`;
 cosmetic — that file is served no-cache).
-pytest baseline (`-m pytest -q tests\`, ~668 passed): the same 4 plus pytest-only
+pytest baseline (`-m pytest -q tests\`, ~693 passed): the same 4 plus pytest-only
 pre-existing reds — `test_china_hub` (2: one asserts modelscope-missing behavior, one
 downloads from ModelScope), `test_cli_entrypoints` (1, README does not document
 `train_anima_by_toml.sh`), `test_dataset_editor_api` (1, dist tageditor shell lacks the
@@ -236,6 +236,24 @@ After editing any file under `frontend/dist/`, bump the shared cache key: edit
 `LEGACY_SPA_ASSET_CACHE_KEYS`, then run `scripts/bump_spa_asset_cache_key.py`.
 Partial bumps are worse than none — a stale `?v=` on one chunk makes the browser load two
 copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.py` enforces this.
+Exceptions and traps (2026-08-01):
+
+- No-cache-served files skip the bump: `sd-trainer-brand.js`, `sd-trainer-queue.js` (loaded
+  dynamically by brand.js, zero HTML references), `sd-nav-i18n.js`'s `?v=` **is** the SPA key
+  so the bump ceremony rewrites it automatically. `style.874872ce.css` is hash-named,
+  immutable-cached and referenced **without** `?v=` — never patch it in place (its "Next
+  Trainer" strings are comments only; the 2026-08-01 rebrand deliberately skipped it).
+- **Sidebar injection rule**: `ul.sidebar-items` groups are a Vue v-for. A foreign `<li>`
+  inserted mid-list gets *recycled* on hydration — Vue rewrites its content while the id
+  survives on the hijacked node, so `getElementById` guards lie. Only append at the **end** of
+  a group's `ul.sidebar-item-children` (after the v-for close anchor), and heal by checking
+  the id'd node still contains your content, not merely that it exists (see `ensureNav` in
+  sd-trainer-queue.js). Also `style.874872ce.css` styles sidebar zones positionally
+  (`li:nth-child(2)` = boxed 训练 card, `li:nth-child(3)::before` = the 更多功能 label) —
+  anything changing the top-level li count breaks that numbering.
+- Verify dist UI changes against the *hydrated* DOM, not the SSR HTML:
+  `chrome --headless=new --dump-dom --virtual-time-budget=12000 <url>` (or `--screenshot`);
+  `/lora/sd3.html#sd-queue` auto-opens the queue panel for screenshots.
 
 ### Runtime plumbing worth knowing
 
@@ -274,8 +292,9 @@ copies of `app.js`, which breaks the whole SPA. `tests/test_frontend_dist_cache.
 
 ## Repo conventions
 
-- Remote: `origin` = `storyAura/lora-scripts-story-next` (this fork; commit to `main` and push
-  directly, no PRs). Links to `wochenlong/lora-scripts-next` — issues, releases, `GITHUB_REPO`
+- Remote: `origin` = `storyAura/lora-scripts-story-next` (this fork; commit to `main`, no PRs).
+  **Never `git push` unless the user explicitly asks** (用户裁定 2026-08-01) — finish with a
+  local commit and report "已提交未推送". Links to `wochenlong/lora-scripts-next` — issues, releases, `GITHUB_REPO`
   in `mikazuki/update_check.py`, portable updater URLs — point at the **upstream** on purpose:
   that is where the referenced issues and release packages live. Do not "fix" them.
 - Cutting a version touches four places in one commit: `VERSION` (feeds the sidebar chip via
