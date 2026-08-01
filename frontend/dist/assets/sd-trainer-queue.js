@@ -118,6 +118,12 @@
 #${NAV_ID} .sd-queue-badge.live { background: #574d38; color: #fff7df; }
 html.dark #${NAV_ID} .sd-queue-badge { background: #574d38; color: #f1e5cd; }
 html.dark #${NAV_ID} .sd-queue-badge.live { background: #dfd4bc; color: #2d2411; }
+/* Rendered as the last l2 entry inside the boxed 训练 group; give it a subtle
+   top separator so it reads as its own 「队列」 zone at the card's bottom edge. */
+#${NAV_ID} {
+  margin-top: 0.45rem; padding-top: 0.45rem;
+  border-top: 1px dashed var(--c-border, #dcdfe6);
+}
 
 #${OVERLAY_ID} {
   position: fixed; inset: 0; z-index: 3500; display: flex; flex-direction: column;
@@ -230,32 +236,36 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
   // ----------------------------------------------------------------- sidebar
 
   function ensureNav() {
+    // Vue re-renders can absorb foreign nodes (the id survives on a recycled
+    // li while our content is replaced) — treat such husks as gone and re-add.
+    const existing = document.getElementById(NAV_ID);
+    if (existing) {
+      if (existing.querySelector('a[href="#sd-queue"]')) return;
+      existing.removeAttribute("id");
+    }
     const sidebar = document.querySelector(".sidebar .sidebar-items");
-    if (!sidebar || document.getElementById(NAV_ID)) return;
-    let trainGroup = null;
+    if (!sidebar) return;
+    let trainChildren = null;
     sidebar.querySelectorAll(":scope > li").forEach((li) => {
-      if (trainGroup) return;
+      if (trainChildren) return;
       const heading = li.querySelector(":scope > p.sidebar-item.sidebar-heading");
       const text = normalize(heading && heading.textContent);
-      if (text === "训练" || text === "Training") trainGroup = li;
+      if (text === "训练" || text === "Training") {
+        trainChildren = li.querySelector(":scope > ul.sidebar-item-children");
+      }
     });
-    if (!trainGroup) return;
+    if (!trainChildren) return;
 
+    // appended at the END of the v-for list — the position sd-nav-i18n's
+    // terminal link proved survives hydration re-renders
     const en = isEnglish();
     const li = document.createElement("li");
     li.id = NAV_ID;
-    const heading = document.createElement("p");
-    heading.className = "sidebar-item sidebar-heading";
-    heading.tabIndex = 0;
-    heading.appendChild(document.createTextNode(en ? "Queue " : "队列 "));
-    const children = document.createElement("ul");
-    children.className = "sidebar-item-children";
-    const itemLi = document.createElement("li");
     const a = document.createElement("a");
     a.className = "sidebar-item sidebar-heading";
     a.href = "#sd-queue";
     a.setAttribute("aria-label", en ? "Training Queue" : "训练队列");
-    a.appendChild(document.createTextNode(en ? " Training Queue" : " 训练队列"));
+    a.appendChild(document.createTextNode(en ? " Training Queue " : " 训练队列 "));
     const badge = document.createElement("span");
     badge.className = "sd-queue-badge";
     a.appendChild(badge);
@@ -264,11 +274,9 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
       ev.stopPropagation();
       openOverlay();
     });
-    itemLi.appendChild(a);
-    children.appendChild(itemLi);
-    li.appendChild(heading);
-    li.appendChild(children);
-    trainGroup.insertAdjacentElement("afterend", li);
+    li.appendChild(a);
+    trainChildren.appendChild(li);
+    console.debug("[sd-queue] sidebar entry injected");
     renderNavBadge();
   }
 
@@ -570,6 +578,7 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
   }
 
   function boot() {
+    console.debug("[sd-queue] boot");
     injectStyle();
     ensureNav();
     refresh();
