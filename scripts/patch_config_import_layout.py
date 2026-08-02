@@ -211,6 +211,15 @@ UPGRADE_REPLACEMENTS: list[tuple[str, str, str]] = [
         "return e.gpu_ids&&(e.gpu_ids=e.gpu_ids.map(r=>r.match(/GPU (\\d+):/)[1])),e",
         'return e.gpu_ids&&(e.gpu_ids=e.gpu_ids.map(r=>{if(r==null)return"";if(typeof r==="number"||/^\\d+$/.test(String(r)))return String(r);const m=String(r).match(/GPU (\\d+):/);return m?m[1]:String(r)}).filter(Boolean)),e',
     ),
+    # A successfully applied pending import must win over the autosave restore:
+    # y() runs after the import and re-assigned the stale autosave over the just
+    # hydrated config (and the queue edit flow then saved that stale form back).
+    # On success, persist the hydrated model as the new autosave and skip y().
+    (
+        "pending import wins over autosave restore",
+        'await mikazukiApplyImportedConfig(cfg,t,n.value,a,"\\u5df2\\u5728\\u76ee\\u6807\\u9875\\u9762\\u5bfc\\u5165\\u914d\\u7f6e",!1,!0)}catch(e){console.log(e)}}y()})',
+        'if(await mikazukiApplyImportedConfig(cfg,t,n.value,a,"\\u5df2\\u5728\\u76ee\\u6807\\u9875\\u9762\\u5bfc\\u5165\\u914d\\u7f6e",!1,!0)){localStorage.setItem(`configs-${t}-autosave`,JSON.stringify(clone(a.value)));return}}catch(e){console.log(e)}}y()})',
+    ),
 ]
 
 PREVIEW_SIGNAL_KEYS = (

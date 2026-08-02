@@ -378,5 +378,55 @@ class AnimaLoraTypeBranchConstTests(unittest.TestCase):
         self.assertNotIn("network_module", result["config"])
 
 
+class QueueEditHandoverRoundTripTests(unittest.TestCase):
+    """The queue 「编辑」 flow hands the stored /api/run body to validate-import.
+
+    That body is parseParams output: string LRs parseFloat'ed to numbers and
+    every LyCORIS branch field folded into network_args then deleted
+    (needDeleteParams). The backend must hydrate the UI fields back so the
+    form's fullReplace merge restores the entry instead of blanking it.
+    """
+
+    def test_flat_posted_lokr_config_round_trips_for_the_form(self):
+        posted = {
+            "model_train_type": "anima-lora",
+            "lora_type": "lokr",
+            "pretrained_model_name_or_path": "./sd-models/anima-base.safetensors",
+            "train_data_dir": "./train/aki",
+            "learning_rate": 0.0001,
+            "unet_lr": 0.0001,
+            "text_encoder_lr": 1e-05,
+            "max_train_epochs": 24,
+            "train_batch_size": 4,
+            "gradient_checkpointing": True,
+            "network_dim": 10000,
+            "network_alpha": 1,
+            "network_module": "lycoris.kohya",
+            "network_args": [
+                "conv_dim=100000",
+                "conv_alpha=1",
+                "dropout=0",
+                "algo=lokr",
+                "factor=8",
+                "full_matrix=True",
+            ],
+        }
+        result = validate_config_import("sd3-lora", posted)
+        self.assertEqual(result["result"], "ok")
+        config = result["config"]
+        # branch consts stamped so the lora_type union keeps matching
+        self.assertEqual(config["network_module"], "lycoris.kohya")
+        self.assertEqual(config["lycoris_algo"], "lokr")
+        # deleted branch fields hydrated back from network_args
+        self.assertEqual(config["lokr_factor"], 8)
+        self.assertEqual(config["conv_dim"], 100000)
+        self.assertEqual(config["dropout"], 0)
+        self.assertIs(config["full_matrix"], True)
+        # user values pass through untouched (frontend re-formats LR strings)
+        self.assertEqual(config["learning_rate"], 0.0001)
+        self.assertEqual(config["max_train_epochs"], 24)
+        self.assertEqual(config["model_train_type"], "anima-lora")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -123,6 +123,42 @@ class TrainSubmitLoadingStaticTests(unittest.TestCase):
             )
         self.assertEqual(layout, repatched)
 
+    def test_pending_import_wins_over_autosave_restore(self):
+        """Applied pending import must not be clobbered by the autosave restore.
+
+        onMounted ran y() (verbatim autosave → model) *after* the pending
+        import apply, so the freshly hydrated config was immediately
+        overwritten by the stale autosave — the queue 「编辑」 flow then showed
+        the previous form state instead of the entry being edited. On success
+        the hydrated model becomes the new autosave and y() is skipped.
+        """
+        layout = Path("frontend/dist/assets/layout.96d49288.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            'if(await mikazukiApplyImportedConfig(cfg,t,n.value,a,'
+            '"\\u5df2\\u5728\\u76ee\\u6807\\u9875\\u9762\\u5bfc\\u5165\\u914d\\u7f6e",!1,!0))'
+            "{localStorage.setItem(`configs-${t}-autosave`,JSON.stringify(clone(a.value)));return}"
+            "}catch(e){console.log(e)}}y()})",
+            layout,
+        )
+        self.assertNotIn(
+            '"\\u5df2\\u5728\\u76ee\\u6807\\u9875\\u9762\\u5bfc\\u5165\\u914d\\u7f6e",!1,!0)}catch(e){console.log(e)}}y()})',
+            layout,
+        )
+
+    def test_patch_script_upgrade_replacements_are_idempotent(self):
+        layout = Path("frontend/dist/assets/layout.96d49288.js").read_text(
+            encoding="utf-8"
+        )
+        repatched = layout
+        for label, old, new in patch_config_import_layout.UPGRADE_REPLACEMENTS:
+            repatched = patch_config_import_layout._replace_once(
+                repatched, label, old, new
+            )
+        self.assertEqual(layout, repatched)
+
     def test_layout_history_row_unwrap_and_preview_pipeline(self):
         layout = Path("frontend/dist/assets/layout.96d49288.js").read_text(
             encoding="utf-8"

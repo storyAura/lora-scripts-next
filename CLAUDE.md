@@ -275,10 +275,16 @@ Exceptions and traps (2026-08-01):
   `config/train_queue.json` (gitignored); on restart `active=False`, running→failed. Frontend
   is `frontend/dist/assets/sd-trainer-queue.js` (no-cache, dynamically loaded by
   sd-trainer-brand.js — no HTML references, so **no SPA cache-key bump needed** for either).
-  Editing loads the entry config through `localStorage["configs-<pageTrainType>-autosave"]` +
-  hard navigation (the form only reads that key at mount). layout.96d49288.js's success toast
-  was string-patched to prefer `data.queue_message`
-  (`tests/test_train_submit_loading_static.py` guards the exact string;
+  Editing hands the entry config over via `sessionStorage["mikazuki-pending-import"]` + hard
+  navigation — the page layout applies it on mount through `/api/config/validate-import`
+  (branch consts, network_args hydration, schema-default merge) and then persists the hydrated
+  model as the new autosave. **Never write the entry config into `configs-*-autosave`**: it is
+  the flat POSTed body (string LRs parseFloat'ed to numbers, branch fields folded into
+  network_args) and the verbatim restore blanks the form on every load (2026-08-02 incident;
+  `tests/test_queue_edit_static.py` + `tests/test_config_import.py` round-trip guard it).
+  layout.96d49288.js is string-patched so a successfully applied pending import skips the
+  autosave restore `y()` (which used to clobber it) and to prefer `data.queue_message` in the
+  success toast (`tests/test_train_submit_loading_static.py` guards the exact strings;
   `tests/test_train_queue.py` covers the conveyor).
 - **Log streaming**: `mikazuki/train_log_hub.py` keeps a 15000-line ring buffer per task;
   `GET /api/train/log/stream/{task_id}` is SSE. Snapshot cursors are **absolute** appended-line

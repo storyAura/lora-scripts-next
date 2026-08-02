@@ -3,21 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>训练监控 — Next Trainer</title>
+  <title>训练监控 — Next Story Trainer</title>
   <style>
+    /* 奶油咖啡主视觉（与主界面/终端页一致）：淡白底 + 白卡片，
+       咖啡色只用于文字层级与重点元素；日志区保留深咖 shell。 */
     :root {
-      --bg: #0b0d12;
-      --panel: #12151c;
-      --panel-2: #161a23;
-      --border: #1e293b;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --dim: #64748b;
-      --accent: #a78bfa;
-      --ok: #34d399;
-      --warn: #fbbf24;
-      --err: #f87171;
-      --pink: #f472b6;
+      --bg: #faf8f1;
+      --panel: #ffffff;
+      --border: #f1e5cd;
+      --text: #2d2411;
+      --muted: #847964;
+      --dim: #b4a992;
+      --accent: #574d38;
+      --ok: #15803d;
+      --warn: #b45309;
+      --err: #b91c1c;
+      --shell: #2d2411;
+      --shell-text: #efe6d2;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -28,7 +30,7 @@
       font: 14px/1.5 ui-monospace, "Cascadia Code", "Sarasa Mono SC", Consolas, monospace;
     }
     a { color: var(--accent); }
-    code { color: var(--pink); }
+    code { color: var(--accent); background: var(--border); padding: 1px 6px; border-radius: 4px; }
     .container {
       max-width: 1280px; margin: 0 auto; padding: 20px;
       display: flex; flex-direction: column; gap: 16px; min-height: 100vh;
@@ -41,21 +43,22 @@
     }
     header .pill {
       font-size: 12px; padding: 4px 10px; border-radius: 999px;
-      background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
     }
     header .pill.live::before  { content: "● "; color: var(--ok); }
     header .pill.done::before  { content: "● "; color: var(--dim); }
     header .pill.err::before   { content: "● "; color: var(--err); }
+    header .pill code { background: transparent; padding: 0; }
     header .spacer { flex: 1; }
     header .toggle {
       cursor: pointer; user-select: none;
       font-size: 12px; padding: 4px 10px; border-radius: 6px;
-      background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+      background: var(--panel); border: 1px solid var(--border); color: var(--text);
     }
-    header .toggle.on { border-color: var(--accent); color: var(--accent); }
+    header .toggle.on { border-color: var(--accent); color: var(--accent); background: #fff7df; }
     header .copy-btn {
       cursor: pointer; font-size: 11px; padding: 2px 8px; border-radius: 4px;
-      background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
     }
     header .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
 
@@ -65,22 +68,25 @@
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     }
     .card {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
       padding: 12px 14px; min-height: 72px;
+      box-shadow: 0 4px 18px rgba(17, 9, 0, 0.04);
     }
     .card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
     .card .value { margin-top: 6px; font-size: 18px; font-weight: 600; word-break: break-all; }
     .card .sub   { font-size: 11px; color: var(--dim); margin-top: 2px; }
+    .card .sub.amber { color: var(--warn); }
     .card.status .value.running  { color: var(--ok); }
     .card.status .value.finished { color: var(--accent); }
     .card.status .value.error    { color: var(--err); }
     .progress { margin-top: 6px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-    .progress > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--pink)); transition: width 0.3s ease; }
+    .progress > div { height: 100%; background: var(--accent); transition: width 0.3s ease; }
 
-    /* ── log pane ─────────────────────────────────────── */
+    /* ── log pane（深咖 shell，同终端页） ───────────────── */
     .pane {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
       display: flex; flex-direction: column; flex: 1; min-height: 320px;
+      box-shadow: 0 4px 18px rgba(17, 9, 0, 0.04); overflow: hidden;
     }
     .pane h2 {
       margin: 0; padding: 10px 14px; font-size: 12px; font-weight: 600;
@@ -93,9 +99,10 @@
       margin: 0; padding: 12px 14px; flex: 1; overflow-y: auto;
       white-space: pre-wrap; word-break: break-word; font-size: 12.5px;
       max-height: calc(100vh - 380px); min-height: 280px;
+      background: var(--shell); color: var(--shell-text);
     }
-    .line-err { color: var(--err); }
-    .line-warn { color: var(--warn); }
+    .line-err { color: #fb7185; }
+    .line-warn { color: #facc15; }
 
     /* ── outputs ─────────────────────────────────────── */
     .outputs ul { list-style: none; margin: 0; padding: 8px 14px 12px; }
@@ -111,9 +118,8 @@
     .outputs .empty { color: var(--dim); padding: 12px 14px; font-size: 12.5px; }
 
     /* ── hint ─────────────────────────────────────── */
-    .hint { background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px;
+    .hint { background: var(--panel); border: 1px dashed var(--border); border-radius: 10px;
             padding: 16px; color: var(--muted); font-size: 13px; line-height: 1.7; }
-    .hint code { background: rgba(167,139,250,0.08); padding: 1px 6px; border-radius: 3px; }
   </style>
 </head>
 <body>
@@ -137,8 +143,7 @@
       <div class="card">      <div class="label">Epoch</div>  <div id="s-epoch" class="value">—</div><div id="s-epoch-sub" class="sub"></div></div>
       <div class="card">      <div class="label">ETA</div>    <div id="s-eta" class="value">—</div><div id="s-eta-sub" class="sub"></div></div>
       <div class="card">      <div class="label">Loss</div>   <div id="s-loss" class="value">—</div><div id="s-loss-sub" class="sub"></div></div>
-      <div class="card">      <div class="label">LR</div>     <div id="s-lr" class="value">—</div></div>
-      <div class="card">      <div class="label">速度</div>   <div id="s-speed" class="value">—</div><div class="sub">it/s</div></div>
+      <div class="card">      <div class="label">速度</div>   <div id="s-speed" class="value">—</div><div class="sub" id="s-speed-unit">it/s</div></div>
     </div>
 
     <div class="pane">
@@ -161,13 +166,13 @@
     const sEpoch = $("s-epoch"), sEpochSub = $("s-epoch-sub");
     const sEta = $("s-eta"), sEtaSub = $("s-eta-sub");
     const sLoss = $("s-loss"), sLossSub = $("s-loss-sub");
-    const sLr = $("s-lr"), sSpeed = $("s-speed");
+    const sSpeed = $("s-speed"), sSpeedUnit = $("s-speed-unit");
     const lineCountEl = $("line-count");
     const followBtn = $("autofollow");
     const outputList = $("output-list");
     const copyBtn = $("copy-tid");
 
-    /* ─── sticky-bottom auto-scroll (核心修复) ─────────────────────
+    /* ─── sticky-bottom auto-scroll ───────────────────────────────
      *   • 用户在底部附近 → 新日志自动滚到底（追日志体验）
      *   • 用户上翻看历史 → 不打扰（不强制把他拉回去）
      *   • 用户回到底部 → 重新进入跟随模式
@@ -189,32 +194,58 @@
     });
 
     /* ─── kohya stdout 解析 ─────────────────────────────────────
-     *   典型行：
-     *     steps:  10%|██▏       | 100/1000 [00:11:05<01:39:11, 1.77it/s, avr_loss=0.0876]
+     *   训练主进度（速度慢于 1it/s 时 tqdm 会切换成 s/it 单位）：
+     *     steps:   9%|██▏  | 80/864 [03:26<33:47, 2.59s/it, Average key norm=0, Keys Scaled=0, avr_loss=0.127]
+     *   采样预览进度（不能污染训练统计！只在状态卡做提示）：
+     *     Sampling: 100%|██| 20/20 [00:11<00:00, 1.81it/s]
+     *   条形帧可能整行到达，也可能被拆成 "steps: 9%|██" + "| 80/864 [...]"
+     *   两行 —— 用 barKind 记住最近的条形归属，裸数字尾巴跟随它。
      *   其它感兴趣的行：
-     *     epoch 1/10  /  epoch is incremented. 1 -> 2
-     *     learning_rate / lr: ... */
-    const RX_TQDM = /(\d+)\s*\/\s*(\d+)\s*\[([0-9:\.]+)(?:<([0-9:?]+))?,\s*([\d.]+)\s*it\/s(?:[^,]*,\s*avr_loss=([\d.eE+\-]+))?/;
+     *     epoch 3/24  /  epoch is incremented. current_epoch: 2, epoch: 3 */
+    const RX_TAIL  = /(\d+)\s*\/\s*(\d+)\s*\[\s*([0-9:]+)(?:<([0-9:?\-]+))?(?:,\s*([\d.]+)\s*(it\/s|s\/it))?/;
+    const RX_LOSS  = /avr_loss\s*=\s*([\d.eE+\-]+)/;
     const RX_EPOCH_FRAC = /epoch[^\n\r]*?(\d+)\s*\/\s*(\d+)/i;
-    const RX_EPOCH_INC  = /epoch is incremented\.\s*(\d+)\s*->\s*(\d+)/i;
-    const RX_LR         = /(?:^|\s)(?:lr|learning[_\s]?rate)\s*[:=]\s*([\d.eE+\-]+)/i;
+    const RX_EPOCH_INC_ARROW = /epoch is incremented\.\s*(\d+)\s*->\s*(\d+)/i;
+    const RX_EPOCH_INC_KV = /epoch is incremented\..*[,\s]epoch:\s*(\d+)/i;
     const fmt = (v, n=4) => (typeof v === "number" && isFinite(v)) ? v.toFixed(n).replace(/\.?0+$/,"") || v.toFixed(n) : "—";
-    let lastLoss = null, lastIts = null, lastLr = null, totalEpochs = null;
+    let lastLoss = null, totalEpochs = null;
+    let barKind = null;   // null | "steps" | "sampling" —— 训练条出现前忽略裸尾巴（如缓存 latents 的无名条）
     function parseLine(line) {
-      const m = line.match(RX_TQDM);
-      if (m) {
+      if (/Sampling\s*:/i.test(line)) barKind = "sampling";
+      else if (/steps\s*:/i.test(line)) barKind = "steps";
+
+      const m = line.match(RX_TAIL);
+      if (m && barKind === "steps") {
         const cur = +m[1], total = +m[2];
-        const elapsed = m[3], eta = m[4] || "—";
-        const its = +m[5];
-        const loss = m[6] !== undefined ? +m[6] : null;
+        const elapsed = m[3];
+        let eta = (m[4] || "").trim();
+        if (eta === "?" || eta === "-") eta = "";
         const pct = total > 0 ? (cur / total * 100) : 0;
         sProg.textContent = `${cur} / ${total}  (${pct.toFixed(1)}%)`;
         sProgBar.style.width = Math.min(100, pct).toFixed(2) + "%";
-        sEta.textContent = eta;
+        sEta.textContent = eta || "—";
         sEtaSub.textContent = "已用 " + elapsed;
-        sSpeed.textContent = its.toFixed(2);
-        lastIts = its;
-        if (loss !== null) {
+        if (m[5]) {
+          sSpeed.textContent = (+m[5]).toFixed(2);
+          sSpeedUnit.textContent = m[6];   // it/s 或 s/it，按训练器原样显示
+        }
+        sStatusSub.textContent = "";
+        sStatusSub.classList.remove("amber");
+      } else if (m && barKind === "sampling") {
+        const cur = +m[1], total = +m[2];
+        if (total > 0 && cur < total) {
+          sStatusSub.textContent = `采样预览 ${cur}/${total}`;
+          sStatusSub.classList.add("amber");
+        } else {
+          sStatusSub.textContent = "采样完成，继续训练…";
+          sStatusSub.classList.remove("amber");
+        }
+      }
+
+      const ml = line.match(RX_LOSS);   // avr_loss 可能隔着若干 postfix 段，整行找
+      if (ml) {
+        const loss = +ml[1];
+        if (isFinite(loss)) {
           sLoss.textContent = fmt(loss, 4);
           if (lastLoss !== null) {
             const d = loss - lastLoss;
@@ -223,23 +254,20 @@
           lastLoss = loss;
         }
       }
-      const me = line.match(RX_EPOCH_FRAC);
-      if (me) {
-        const cur = +me[1], total = +me[2];
-        sEpoch.textContent = cur;
-        sEpochSub.textContent = "/ " + total;
-        totalEpochs = total;
-      } else {
-        const minc = line.match(RX_EPOCH_INC);
-        if (minc) {
-          sEpoch.textContent = minc[2];
-          if (totalEpochs) sEpochSub.textContent = "/ " + totalEpochs;
+
+      if (!/steps\s*:/i.test(line)) {
+        const me = line.match(RX_EPOCH_FRAC);
+        if (me) {
+          sEpoch.textContent = +me[1];
+          sEpochSub.textContent = "/ " + +me[2];
+          totalEpochs = +me[2];
+        } else {
+          const minc = line.match(RX_EPOCH_INC_ARROW) || line.match(RX_EPOCH_INC_KV);
+          if (minc) {
+            sEpoch.textContent = minc[2] !== undefined ? minc[2] : minc[1];
+            if (totalEpochs) sEpochSub.textContent = "/ " + totalEpochs;
+          }
         }
-      }
-      const mlr = line.match(RX_LR);
-      if (mlr) {
-        const lr = +mlr[1];
-        if (isFinite(lr)) { sLr.textContent = lr.toExponential(2); lastLr = lr; }
       }
     }
 

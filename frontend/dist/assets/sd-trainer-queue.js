@@ -18,19 +18,21 @@
   const TOAST_ID = "sd-queue-toast";
   const POLL_MS = 3000;
 
-  // model_train_type → page that can edit it (storage = page frontmatter trainType,
-  // the `t` in localStorage key `configs-${t}-autosave` restored verbatim on load)
+  // model_train_type → training page that can edit it. The entry config is
+  // handed over via sessionStorage["mikazuki-pending-import"], which the page
+  // layout applies on mount through /api/config/validate-import (branch-const
+  // stamping, network_args → UI field hydration, schema-default merge).
   const PAGE_MAP = {
-    "anima-lora": { path: "/lora/sd3.html", storage: "sd3-lora" },
-    "sd3-lora": { path: "/lora/sd3.html", storage: "sd3-lora" },
-    "anima-finetune": { path: "/lora/anima-finetune.html", storage: "anima-finetune" },
-    "anima-lora-fast": { path: "/lora/anima-fast.html", storage: "anima-lora-fast" },
-    "flux-lora": { path: "/lora/flux.html", storage: "flux-lora" },
-    "flux-finetune": { path: "/lora/flux.html", storage: "flux-lora" },
-    "sd-lora": { path: "/lora/master.html", storage: "lora-master" },
-    "sdxl-lora": { path: "/lora/master.html", storage: "lora-master" },
-    "sdxl-finetune": { path: "/lora/master.html", storage: "lora-master" },
-    "sd-dreambooth": { path: "/", storage: "dreambooth" },
+    "anima-lora": { path: "/lora/sd3.html" },
+    "sd3-lora": { path: "/lora/sd3.html" },
+    "anima-finetune": { path: "/lora/anima-finetune.html" },
+    "anima-lora-fast": { path: "/lora/anima-fast.html" },
+    "flux-lora": { path: "/lora/flux.html" },
+    "flux-finetune": { path: "/lora/flux.html" },
+    "sd-lora": { path: "/lora/master.html" },
+    "sdxl-lora": { path: "/lora/master.html" },
+    "sdxl-finetune": { path: "/lora/master.html" },
+    "sd-dreambooth": { path: "/dreambooth/" },
   };
 
   const STATUS_META = {
@@ -586,12 +588,16 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
       return;
     }
     try {
-      localStorage.setItem(`configs-${page.storage}-autosave`, JSON.stringify(cfgResp.data.config));
+      // NEVER write the entry config into configs-*-autosave: it is the flat
+      // POSTed config (string LRs parsed to numbers, branch fields folded into
+      // network_args) and restoring it verbatim blanks the form. The pending
+      // import channel re-hydrates it server-side and merges schema defaults.
+      sessionStorage.setItem("mikazuki-pending-import", JSON.stringify(cfgResp.data.config));
     } catch (err) {
       toast("写入本地表单缓存失败：" + err, false);
       return;
     }
-    // hard navigation on purpose: the form only reads the autosave key on page load
+    // hard navigation on purpose: the page applies the pending import on mount
     if (location.pathname === page.path) {
       location.reload();
     } else {
