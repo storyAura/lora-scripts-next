@@ -266,7 +266,10 @@ Exceptions and traps (2026-08-01):
   intercept — unarmed (tests/scripts calling `create_toml_file` directly) keeps stock behavior.
   Armed rules: **every submit enqueues** (queue-first is the default; idle submits auto-start
   the conveyor unless `user_paused`); an entry in `editing` → the submit *saves into that
-  entry* and the conveyor halts (`user_paused=True`) until manually restarted. done/failed
+  entry*. Editing halts the conveyor (nothing launches mid-edit); saving or cancelling the
+  edit **auto-resumes** it unless the user had pressed 暂停队列 themselves before editing
+  (`_resume_after_edit`, in-memory only — after a restart the never-auto-start-GPU boot rule
+  wins; 用户裁定 2026-08-02, the old "保存后保持暂停" was rejected). done/failed
   entries stay as history (finish time + `duration_seconds` in the snapshot) until deleted or
   「归档清除」. Note: armed `/api/run` responses carry `queue_message`, **not** `task_id`
   (launch is async via the runner). Entries launch via

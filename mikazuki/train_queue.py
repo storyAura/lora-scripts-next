@@ -5,7 +5,9 @@ State machine behind the 「训练队列」 sidebar panel:
 - ``intercept_run`` sits at the top of ``POST /api/run``: while a task is
   running (or 排队模式 is on) new submits become queue entries instead of
   hitting the trainer; while an entry is being edited the submit *saves* into
-  that entry and the conveyor stays halted until the user starts it manually.
+  that entry. Editing halts the conveyor (nothing may launch mid-edit); saving
+  or cancelling the edit auto-resumes it — unless the user had paused the
+  queue themselves before editing (that explicit pause is respected).
 - ``runner`` is an asyncio loop started at app lifespan: when the current
   task reaches a terminal state it records the achieved it/s (fed back into
   per-entry ETA estimates), marks the entry done/failed, and launches the
@@ -147,6 +149,10 @@ class TrainQueue:
         self.user_paused = False
         self.halt_reason = ""
         self.last_speed: Optional[Dict[str, Any]] = None
+        # editing pauses the conveyor as a side effect; this remembers whether
+        # it was live before the edit so save/cancel can resume it (in-memory
+        # only: after a restart the never-auto-start-GPU boot rule wins anyway)
+        self._resume_after_edit = False
 
     # ---------------------------------------------------------------- plumbing
 
@@ -308,14 +314,19 @@ class TrainQueue:
                 editing["status"] = "queued"
                 editing["error"] = None
                 editing["updated_at"] = _now_iso()
+                if self._resume_conveyor_after_edit():
+                    try:
+                        tasks = self._tasks_source()
+                    except Exception:
+                        tasks = {}
+                    suffix = "，当前任务完成后自动开始" if self._busy_locked(tasks) else "，即将自动开始"
+                else:
+                    suffix = "。队列处于暂停中，请到训练队列点「开始队列」"
                 self._save()
+                message = f"已保存修改到队列任务「{editing['name']}」{suffix}"
                 return _success(
-                    f"已保存修改到队列任务「{editing['name']}」",
-                    data={
-                        "queued": True,
-                        "entry_id": editing["id"],
-                        "queue_message": f"已保存修改到队列任务「{editing['name']}」，队列保持暂停，请到训练队列手动开始",
-                    },
+                    message,
+                    data={"queued": True, "entry_id": editing["id"], "queue_message": message},
                 )
 
             # every submit goes through the queue; unless the user paused it,
@@ -386,6 +397,15 @@ class TrainQueue:
     def requeue(self, entry_id: str):
         return self._set_status(entry_id, "queued", {"failed", "done"}, "重新排队")
 
+    def _resume_conveyor_after_edit(self) -> bool:
+        """保存/取消编辑后恢复传送带 — 编辑前就被用户手动暂停的队列保持暂停。"""
+        resumed, self._resume_after_edit = self._resume_after_edit, False
+        if resumed:
+            self.user_paused = False
+            self.active = True
+            self.halt_reason = ""
+        return resumed
+
     def set_editing(self, entry_id: str, editing: bool):
         with self._lock:
             self._ensure_loaded()
@@ -399,15 +419,21 @@ class TrainQueue:
                 if entry.get("status") not in EDITABLE_STATUSES:
                     return _fail("正在训练或排队启动中的任务不能编辑")
                 entry["status"] = "editing"
-                # per spec: while editing, a finishing task must NOT trigger the
-                # next one — and new submits must not resume the conveyor either
+                # editing halts the conveyor so nothing launches mid-edit;
+                # remember whether it was live so save/cancel can resume it
+                self._resume_after_edit = not self.user_paused
                 self.active = False
                 self.user_paused = True
-                self.halt_reason = "有任务处于编辑状态，队列已暂停；保存后请手动开始"
+                self.halt_reason = (
+                    "有任务处于编辑状态，队列已暂停；保存或取消后自动继续"
+                    if self._resume_after_edit
+                    else "有任务处于编辑状态，队列已暂停；保存后请手动开始"
+                )
             else:
                 if entry.get("status") != "editing":
                     return _fail("该任务不在编辑状态")
                 entry["status"] = "queued"
+                self._resume_conveyor_after_edit()
             entry["updated_at"] = _now_iso()
             self._save()
             return _success("已更新编辑状态", data=self.snapshot())
@@ -464,6 +490,8 @@ class TrainQueue:
             self._ensure_loaded()
             self.user_paused = True
             self.active = False
+            # an explicit pause always wins: a later edit-save must not resume
+            self._resume_after_edit = False
             self.halt_reason = "已手动暂停队列（正在训练的任务不受影响）"
             self._save()
             return _success("队列已暂停，当前训练继续，不再自动开始下一个", data=self.snapshot())
@@ -558,9 +586,11 @@ class TrainQueue:
                 changed = True
 
             if self.active and any(e.get("status") == "editing" for e in self.entries):
+                # belt for races: the conveyor was live, so save/cancel resumes it
+                self._resume_after_edit = True
                 self.active = False
                 self.user_paused = True
-                self.halt_reason = "有任务处于编辑状态，队列已暂停；保存后请手动开始"
+                self.halt_reason = "有任务处于编辑状态，队列已暂停；保存或取消后自动继续"
                 changed = True
 
             launch = None

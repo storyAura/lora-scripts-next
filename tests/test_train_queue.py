@@ -120,7 +120,8 @@ class InterceptTests(unittest.TestCase):
             self.assertFalse(queue.active)
             self.assertTrue(queue.user_paused)
 
-    def test_editing_entry_receives_the_submit(self):
+    def test_editing_entry_receives_the_submit_and_respects_user_pause(self):
+        """The queue was paused by the user BEFORE editing → saving keeps it paused."""
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
             queue.stop()
@@ -133,23 +134,51 @@ class InterceptTests(unittest.TestCase):
             updated = dict(BASE_CONFIG, output_name="my-char-v2")
             response = queue.intercept_run(updated)
             self.assertIn("保存修改", response.message)
+            self.assertIn("暂停", response.data["queue_message"])
             entry = queue.entries[0]
             self.assertEqual(entry["status"], "queued")
             self.assertEqual(entry["name"], "my-char-v2")
             self.assertEqual(entry["config"]["output_name"], "my-char-v2")
-            self.assertFalse(queue.active, "saved edit must not auto-start the queue")
+            self.assertFalse(queue.active, "an explicit user pause survives the edit-save")
+            self.assertTrue(queue.user_paused)
 
-    def test_submit_while_editing_saves_and_does_not_resume(self):
-        """While an entry is being edited, any submit saves into it and the conveyor stays halted."""
+    def test_submit_while_editing_saves_and_resumes_live_conveyor(self):
+        """2026-08-02 用户裁定: the conveyor was live before editing → saving auto-resumes it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = make_queue(Path(tmp))
+            queue.intercept_run(dict(BASE_CONFIG))          # idle submit → conveyor live
+            queue.set_editing(queue.entries[0]["id"], True)  # editing halts it
+            self.assertFalse(queue.active)
+            response = queue.intercept_run(dict(BASE_CONFIG, output_name="second"))
+            self.assertEqual(len(queue.entries), 1, "submit during edit updates, not appends")
+            self.assertEqual(queue.entries[0]["name"], "second")
+            self.assertEqual(queue.entries[0]["status"], "queued")
+            self.assertTrue(queue.active, "saved edit must resume the previously live conveyor")
+            self.assertFalse(queue.user_paused)
+            self.assertIn("即将自动开始", response.data["queue_message"])
+
+    def test_cancel_edit_resumes_live_conveyor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = make_queue(Path(tmp))
+            queue.intercept_run(dict(BASE_CONFIG))
+            entry_id = queue.entries[0]["id"]
+            queue.set_editing(entry_id, True)
+            self.assertFalse(queue.active)
+            self.assertEqual(queue.set_editing(entry_id, False).status, "success")
+            self.assertEqual(queue.entries[0]["status"], "queued")
+            self.assertTrue(queue.active, "cancelled edit must resume the previously live conveyor")
+            self.assertFalse(queue.user_paused)
+
+    def test_explicit_pause_during_edit_blocks_auto_resume(self):
+        """暂停队列 pressed mid-edit is an explicit user pause — saving must not override it."""
         with tempfile.TemporaryDirectory() as tmp:
             queue = make_queue(Path(tmp))
             queue.intercept_run(dict(BASE_CONFIG))
             queue.set_editing(queue.entries[0]["id"], True)
+            queue.stop()
             queue.intercept_run(dict(BASE_CONFIG, output_name="second"))
-            self.assertEqual(len(queue.entries), 1, "submit during edit updates, not appends")
-            self.assertEqual(queue.entries[0]["name"], "second")
-            self.assertEqual(queue.entries[0]["status"], "queued")
             self.assertFalse(queue.active)
+            self.assertTrue(queue.user_paused)
 
     def test_editing_is_exclusive(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -226,6 +255,25 @@ class ConveyorTests(unittest.TestCase):
             self.assertFalse(queue.active)
             self.assertTrue(queue.user_paused)
             self.assertEqual(queue.entries[0]["status"], "done")
+
+    def test_saving_edit_after_task_finished_launches_next_automatically(self):
+        """Image #5 incident: previous task done while editing → saving must launch the entry."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks = {}
+            queue = self._queued_queue(tmp, tasks)
+            queue.start()
+            launch = queue.tick()
+            queue.mark_launch_result(launch["id"], True, task_id="t1")
+            queue.set_editing(queue.entries[1]["id"], True)
+            tasks["t1"] = fake_task("FINISHED")
+            self.assertIsNone(queue.tick(), "still editing — nothing may launch")
+
+            response = queue.intercept_run(dict(BASE_CONFIG, output_name="b-edited"))
+            self.assertIn("即将自动开始", response.data["queue_message"])
+            self.assertTrue(queue.active)
+            next_launch = queue.tick()
+            self.assertIsNotNone(next_launch, "saved entry must launch without manual 开始队列")
+            self.assertEqual(next_launch["name"], "b-edited")
 
     def test_drained_queue_deactivates_but_stays_unpaused(self):
         with tempfile.TemporaryDirectory() as tmp:
