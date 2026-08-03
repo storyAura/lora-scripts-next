@@ -416,7 +416,7 @@ function renderCards(status) {
     ["Epoch", metrics.epoch || "-"],
     ["耗时", metrics.duration || metrics.elapsed || "-"],
     ["剩余", status.state === "训练中" ? (metrics.eta || "-") : "-"],
-    ["Loss", metrics.loss || "-"],
+    ["Loss", displayLoss(metrics)],
   ];
   const isTraining = status.state === "训练中";
   const accentLabels = { "状态": true, "进度": true, "Loss": true };
@@ -439,7 +439,8 @@ function renderHero(status) {
   const isTraining = state === "训练中" && !error && !attention;
   let title = heroTitleText(status);
   let copy = "正在等待训练状态。";
-  const lossText = metrics.loss ? "Loss " + metrics.loss : "";
+  const lossDisplay = displayLoss(metrics);
+  const lossText = lossDisplay !== "-" ? "Loss " + lossDisplay : "";
   const trendText = metrics.loss_trend ? "，" + metrics.loss_trend : "";
 
   if (error) {
@@ -513,6 +514,14 @@ function fmtLoss(v) {
   if (abs >= 1) return n.toFixed(3);
   if (abs >= 0.01) return n.toFixed(4);
   return n.toExponential(2);
+}
+
+function displayLoss(metrics) {
+  if (!metrics || metrics.loss === undefined || metrics.loss === null || metrics.loss === "") {
+    return "-";
+  }
+  const formatted = fmtLoss(metrics.loss);
+  return formatted === "-" ? String(metrics.loss) : formatted;
 }
 
 function getChartTheme() {

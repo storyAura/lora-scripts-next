@@ -112,7 +112,9 @@ Python **3.10** recommended. See [Flash Attention 2 docs](docs/flash-attention.m
 
 Automatically opens a monitor page (port 6008) when training starts — GPU stats, training parameters, Loss curves, preview samples, and logs all in one dashboard.
 
-**Hardened for long runs (v2.9.1):** live log streaming keeps flowing past 15,000 lines, task/log history is memory-bounded so multi-day sessions don't accumulate RAM, and TensorBoard curve parsing is cached between polls.
+**Hardened for long runs (v2.9.1+):** live log streaming keeps flowing past 15,000 lines, task/log history is memory-bounded so multi-day sessions don't accumulate RAM, and TensorBoard curve parsing is cached between polls.
+
+**v2.9.2:** stopping a run now waits until the full process tree is dead before the next job can start (fixes dual-training Loss/Epoch jumps); monitor Loss, LR, and params stay bound to the active task and TensorBoard.
 
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png" alt="Train Monitor Dashboard" width="920" />
@@ -179,6 +181,7 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 
 | Date | Version |
 |------|---------|
+| 2026-08-04 | **v2.9.2** — **Critical:** stop-then-restart dual-training (orphaned process tree) fixed; monitor Loss / LR / params stay bound to the active task and TensorBoard · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-27 | **v2.9.1** — Long-run stability: SSE log stream keeps flowing past 15k lines, bounded task/log history, cached monitor TensorBoard parsing; **T-GLoKR** timestep-gated algo, Beta preview scheduler, lora_type form fixes; Chinese locale hydration keeps the right-side training controls fully translated · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-22 | **v2.9.0** — Anima Fast bucket-resolution controls, LoKr config preview fixes, offline-first local tagger models, portable data-dir junctions |
 | 2026-06-27 | **v2.8.2** — Portable pack: **SDXL training**, **tagging**, **preview images**, **config import** fixes; bundled tagger + SDXL tokenizer cache · see [CHANGELOG.md](CHANGELOG.md) |

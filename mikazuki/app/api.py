@@ -643,7 +643,7 @@ async def create_toml_file(request: Request):
 
 async def submit_training_config(config: dict):
     """Full /api/run pipeline from a raw GUI config dict (also the queue runner's launch path)."""
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     autosave_dir = os.path.join(os.getcwd(), "config", "autosave")
     os.makedirs(autosave_dir, exist_ok=True)
     toml_file = os.path.join(autosave_dir, f"{timestamp}.toml")
@@ -829,7 +829,7 @@ async def anima_lora_plugin_preflight(request: Request):
 
 @router.post("/plugins/anima-lora/dry-run")
 async def anima_lora_plugin_dry_run(request: Request):
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     autosave_dir = os.path.join(os.getcwd(), "config", "autosave")
     os.makedirs(autosave_dir, exist_ok=True)
     config: dict = json.loads((await request.body()).decode("utf-8") or "{}")

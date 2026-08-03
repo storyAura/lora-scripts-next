@@ -532,6 +532,169 @@ class TrainMonitorStatusTests(unittest.TestCase):
         self.assertGreaterEqual(len(status["metrics"]["loss_points"]), 1)
         self.assertEqual(status["tensorboard_loss"], [])
 
+    def test_resolve_training_config_prefers_active_task_config_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            autosave = root / "config" / "autosave"
+            autosave.mkdir(parents=True)
+            active_cfg = autosave / "active.toml"
+            newer_cfg = autosave / "newer.toml"
+            active_cfg.write_text(
+                'output_dir = "output/active"\nlearning_rate = 8e-5\nmax_train_epochs = 24\n'
+                'logging_dir = "logs/active"\noptimizer_type = "AdamW8bit"\n',
+                encoding="utf-8",
+            )
+            newer_cfg.write_text(
+                'output_dir = "output/newer"\nlearning_rate = 1e-6\nmax_train_epochs = 10\n'
+                'logging_dir = "logs/newer"\noptimizer_type = "Automagic"\n',
+                encoding="utf-8",
+            )
+            future = time.time() + 3600
+            os.utime(newer_cfg, (future, future))
+
+            with mock.patch.object(server, "REPO", root):
+                resolved = server.resolve_training_config({
+                    "id": "t1",
+                    "status": "RUNNING",
+                    "metadata": {"config_path": str(active_cfg)},
+                })
+                latest = server.latest_training_config()
+
+        self.assertEqual(resolved.get("learning_rate"), "8e-5")
+        self.assertEqual(resolved.get("optimizer_type"), "AdamW8bit")
+        self.assertEqual(resolved.get("logging_dir"), "logs/active")
+        self.assertEqual(latest.get("learning_rate"), "1e-6")
+        self.assertEqual(latest.get("optimizer_type"), "Automagic")
+
+    def test_enrich_metrics_from_tensorboard_overrides_log_loss_and_lr(self):
+        metrics = {"loss": "0.11", "epoch": "7", "lr": "1.00e-06"}
+        series = [
+            {"tag": "loss/current", "latest": 0.1112},
+            {"tag": "loss/average", "latest": 0.1099},
+            {"tag": "lr/unet", "latest": 8e-5},
+        ]
+        enriched = server.enrich_metrics_from_tensorboard(
+            metrics,
+            series,
+            {"max_train_epochs": "24"},
+        )
+        self.assertEqual(enriched["loss"], "0.1099")
+        self.assertEqual(enriched["loss_source"], "tensorboard")
+        self.assertEqual(enriched["lr"], "8.00e-05")
+        self.assertEqual(enriched["lr_source"], "tensorboard")
+        self.assertEqual(enriched["epoch"], "7/24")
+
+    def test_tensorboard_scalars_prefer_logging_dir_over_newer_global_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            logs = repo / "logs"
+            preferred = logs / "active_run" / "network_train"
+            other = logs / "other_run" / "network_train"
+            preferred.mkdir(parents=True)
+            other.mkdir(parents=True)
+
+            preferred_writer = SummaryWriter(str(preferred))
+            other_writer = SummaryWriter(str(other))
+            try:
+                preferred_writer.add_scalar("loss/average", 0.1099, 10)
+                preferred_writer.add_scalar("lr/unet", 8e-5, 10)
+                other_writer.add_scalar("loss/average", 0.99, 99)
+                other_writer.add_scalar("lr/unet", 1e-6, 99)
+            finally:
+                preferred_writer.close()
+                other_writer.close()
+
+            future = time.time() + 7200
+            for path in other.rglob("events.out.tfevents.*"):
+                os.utime(path, (future, future))
+
+            cache = DirectoryScanCache(60.0, lambda: 100.0)
+            server._TB_SCALAR_CACHE["key"] = None
+            server._TB_SCALAR_CACHE["series"] = []
+            with mock.patch.object(server, "REPO", repo), \
+                    mock.patch.object(server, "LOG_DIR", logs), \
+                    mock.patch.object(server, "OUTPUT_DIR", repo / "output"), \
+                    mock.patch.object(server, "_FILE_SCAN_CACHE", cache):
+                preferred_series = server.tensorboard_loss_scalars(
+                    preferred_log_dir=logs / "active_run"
+                )
+                global_series = server.tensorboard_loss_scalars()
+
+        preferred_by_tag = {item["tag"]: item for item in preferred_series}
+        global_by_tag = {item["tag"]: item for item in global_series}
+        self.assertAlmostEqual(preferred_by_tag["loss/average"]["latest"], 0.1099, places=4)
+        self.assertAlmostEqual(preferred_by_tag["lr/unet"]["latest"], 8e-5, places=8)
+        self.assertAlmostEqual(global_by_tag["loss/average"]["latest"], 0.99, places=4)
+
+    def test_collect_status_uses_active_task_config_path_for_train_params(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            autosave = root / "config" / "autosave"
+            autosave.mkdir(parents=True)
+            active_cfg = autosave / "running.toml"
+            decoy_cfg = autosave / "decoy.toml"
+            active_cfg.write_text(
+                'output_dir = "output/running"\n'
+                'learning_rate = 0.00008\n'
+                'max_train_epochs = 24\n'
+                'logging_dir = "logs/running"\n'
+                'optimizer_type = "AdamW8bit"\n'
+                'network_dim = 16\n'
+                'network_alpha = 16\n',
+                encoding="utf-8",
+            )
+            decoy_cfg.write_text(
+                'output_dir = "output/decoy"\n'
+                'learning_rate = 0.000001\n'
+                'max_train_epochs = 10\n'
+                'logging_dir = "logs/decoy"\n'
+                'optimizer_type = "Automagic"\n',
+                encoding="utf-8",
+            )
+            future = time.time() + 3600
+            os.utime(decoy_cfg, (future, future))
+
+            task = {
+                "id": "task-running",
+                "status": "RUNNING",
+                "metadata": {"config_path": str(active_cfg)},
+            }
+            log_lines = [
+                "python vendor/sd-scripts/anima_train_network.py --config_file x.toml",
+                "epoch = 7",
+                "steps:  28%|██▊       | 234/816 [20:09<50:09, avr_loss=0.11]",
+            ]
+            tb_series = [
+                {"tag": "loss/average", "latest": 0.1099, "min": 0.1, "points": [], "run": "logs/running"},
+                {"tag": "lr/unet", "latest": 8e-5, "min": 8e-5, "points": [], "run": "logs/running"},
+            ]
+
+            def fetch_gui_side_effect(path: str):
+                if path == "/train/tasks":
+                    return ({"status": "success", "data": {"tasks": [task]}}, "http://gui/api")
+                if path.startswith("/train/log/tail/"):
+                    return (
+                        {"status": "success", "data": {"lines": log_lines, "done": False}},
+                        "http://gui/api",
+                    )
+                raise AssertionError(path)
+
+            with mock.patch.object(server, "REPO", root), \
+                    mock.patch.object(server, "newest_preview_images", return_value=[]), \
+                    mock.patch.object(server, "build_model_outputs", return_value={}), \
+                    mock.patch.object(server, "tensorboard_loss_scalars", return_value=tb_series), \
+                    mock.patch.object(server, "gpu_info", return_value={}), \
+                    mock.patch.object(server, "gpu_memory_used_mb", return_value=None), \
+                    mock.patch.object(server, "fetch_gui_json", side_effect=fetch_gui_side_effect):
+                status = server.collect_status()
+
+        params = {item["label"]: item["value"] for item in status["train_params"]}
+        self.assertEqual(params.get("优化器"), "AdamW8bit")
+        self.assertIn("8.00e-05", params.get("学习率", status["metrics"].get("lr", "")))
+        self.assertEqual(status["metrics"]["loss"], "0.1099")
+        self.assertEqual(status["metrics"]["epoch"], "7/24")
+        self.assertEqual(status["metrics"]["lr"], "8.00e-05")
+
 
 if __name__ == "__main__":
     unittest.main()

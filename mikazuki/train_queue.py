@@ -220,7 +220,14 @@ class TrainQueue:
     def _busy_locked(self, tasks: Dict[str, Any]) -> bool:
         if any(e.get("status") == "running" for e in self.entries):
             return True
-        return any(self._task_status_name(t) in ("CREATED", "RUNNING") for t in tasks.values())
+        for task in tasks.values():
+            status = self._task_status_name(task)
+            if status in ("CREATED", "RUNNING", "TERMINATING"):
+                return True
+            is_alive = getattr(task, "is_process_alive", None)
+            if callable(is_alive) and is_alive():
+                return True
+        return False
 
     def busy(self) -> bool:
         with self._lock:
@@ -565,7 +572,11 @@ class TrainQueue:
                     changed = True
                     continue
                 status = self._task_status_name(task)
+                # TERMINATING means the OS tree is still being torn down — keep the
+                # queue entry "running" so the conveyor cannot launch a second GPU job.
                 if status not in ("FINISHED", "FAILED", "TERMINATED"):
+                    continue
+                if callable(getattr(task, "is_process_alive", None)) and task.is_process_alive():
                     continue
                 entry["finished_at"] = _now_iso()
                 changed = True

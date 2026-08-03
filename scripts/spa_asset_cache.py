@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # Bump this whenever frontend/dist assets are patched in place (same filename hash).
-SPA_ASSET_CACHE_KEY = "20260803-zh-training-controls"
+SPA_ASSET_CACHE_KEY = "20260804-v2.9.2-changelog"
 
 # Previous keys replaced by scripts/bump_spa_asset_cache_key.py when bumping.
 LEGACY_SPA_ASSET_CACHE_KEYS = (
@@ -16,6 +16,7 @@ LEGACY_SPA_ASSET_CACHE_KEYS = (
     "20260725-submit-const-fix",
     "20260727-changelog-v2.9.1",
     "20260801-story-brand",
+    "20260803-zh-training-controls",
 )
 
 IN_PLACE_PATCHED_DIST_ASSETS = (

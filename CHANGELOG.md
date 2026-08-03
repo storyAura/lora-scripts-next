@@ -3,6 +3,19 @@
 本文件记录 **storyAura/lora-scripts-story-next** 的发行说明（v2.9.0 及更早条目沿袭上游 wochenlong/lora-scripts-next）；kohya-ss/sd-scripts 的变更请见其仓库。
 
 ---
+## v2.9.2 — 2026-08-04
+
+### 严重：停止后再开训可能「双训练」
+
+- **根因**：点停止时只杀子进程、立刻标成已终止，队列会马上启动下一场；旧的 Accelerate/训练进程仍可能占着 GPU，两边往同一 `output` / TensorBoard 写 → Loss 折返、Epoch 从 20 跳回 6、预览「最新图」其实是旧 run。
+- **修复**：终止改为 `TERMINATING`，整棵进程树杀干净（Windows 用 `taskkill /T /F`）后才标 `TERMINATED`；启动前被取消的任务不会再 `Popen`；队列在终止中或进程仍存活时禁止开下一场；autosave 时间戳加微秒，降低同秒撞文件。
+
+### 训练监控数据对齐
+
+- 参数区优先绑定**当前任务**的 `config_path`，不再被更新的其它 autosave 抢绑。
+- TensorBoard 曲线优先当前配置的 `logging_dir`；卡片 / Hero 的 Loss、学习率与 TB scalar 同源回填；Epoch 显示补全为 `当前/总轮数`。
+
+---
 ## v2.9.1 — 2026-07-27
 
 ### 稳定性：长驻服务内存保险

@@ -394,28 +394,55 @@ def newest_preview_images(
 # TensorBoard scalar reading
 # ---------------------------------------------------------------------------
 
-def tensorboard_loss_scalars(limit: int = TENSORBOARD_LOSS_LIMIT) -> list[dict]:
-    """Read real TensorBoard scalar curves from the latest event run."""
+PRIMARY_LOSS_TAGS = (
+    "loss/average",
+    "loss/current",
+    "loss",
+    "loss/epoch_average",
+    "loss/epoch",
+)
+
+
+def _event_snapshots_under(root: Path) -> list[FileSnapshot]:
+    if not root.exists():
+        return []
+    return [
+        snapshot
+        for snapshot in _snapshots_under(root)
+        if snapshot.path.name.startswith("events.out.tfevents.")
+    ]
+
+
+def tensorboard_loss_scalars(
+    limit: int = TENSORBOARD_LOSS_LIMIT,
+    preferred_log_dir: Path | str | None = None,
+) -> list[dict]:
+    """Read real TensorBoard scalar curves from the latest event run.
+
+    When ``preferred_log_dir`` contains events, only that tree is read so the
+    monitor stays bound to the active training run.
+    """
     try:
         from tensorboard.backend.event_processing import event_accumulator
     except Exception:
         return []
 
-    if not LOG_DIR.exists():
-        return []
-
-    event_snapshots = [
-        snapshot
-        for snapshot in _snapshots_under(LOG_DIR)
-        if snapshot.path.name.startswith("events.out.tfevents.")
-    ]
+    preferred = resolve_repo_path(str(preferred_log_dir)) if preferred_log_dir else None
+    event_snapshots = _event_snapshots_under(preferred) if preferred is not None else []
+    if not event_snapshots:
+        if not LOG_DIR.exists():
+            return []
+        event_snapshots = _event_snapshots_under(LOG_DIR)
     if not event_snapshots:
         return []
 
     event_snapshots.sort(key=lambda snapshot: str(snapshot.path))
-    cache_key = tuple(
-        (str(snapshot.path), snapshot.mtime_ns, snapshot.size)
-        for snapshot in event_snapshots
+    cache_key = (
+        str(preferred) if preferred is not None else "",
+        tuple(
+            (str(snapshot.path), snapshot.mtime_ns, snapshot.size)
+            for snapshot in event_snapshots
+        ),
     )
     if cache_key == _TB_SCALAR_CACHE["key"]:
         return _TB_SCALAR_CACHE["series"]
@@ -492,13 +519,105 @@ def tensorboard_loss_scalars(limit: int = TENSORBOARD_LOSS_LIMIT) -> list[dict]:
     return []
 
 
+def format_monitor_loss(value: object) -> str:
+    """Match frontend fmtLoss so hero/cards and TB summary stay identical."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if not math.isfinite(number):
+        return ""
+    abs_value = abs(number)
+    if abs_value >= 1:
+        return f"{number:.3f}"
+    if abs_value >= 0.01:
+        return f"{number:.4f}"
+    return f"{number:.2e}"
+
+
+def format_monitor_lr(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if not math.isfinite(number):
+        return ""
+    if number < 0.001:
+        return f"{number:.2e}"
+    return str(number)
+
+
+def pick_primary_loss_series(series: list[dict]) -> dict | None:
+    for tag in PRIMARY_LOSS_TAGS:
+        for item in series:
+            if item.get("tag") == tag and item.get("latest") is not None:
+                return item
+    for item in series:
+        tag = str(item.get("tag") or "")
+        if tag == "lr" or tag.startswith("lr/"):
+            continue
+        if "loss" in tag.lower() or "avr_loss" in tag:
+            return item
+    return None
+
+
+def pick_primary_lr_series(series: list[dict]) -> dict | None:
+    for item in series:
+        if item.get("tag") == "lr/unet" and item.get("latest") is not None:
+            return item
+    for item in series:
+        tag = str(item.get("tag") or "")
+        if (tag == "lr" or tag.startswith("lr/")) and item.get("latest") is not None:
+            return item
+    return None
+
+
+def enrich_metrics_from_tensorboard(
+    metrics: dict,
+    series: list[dict] | None,
+    config: dict | None = None,
+) -> dict:
+    """Prefer TensorBoard scalars for displayed Loss / LR; complete epoch totals."""
+    if not isinstance(metrics, dict):
+        return {}
+    series = series or []
+
+    primary_loss = pick_primary_loss_series(series)
+    if primary_loss is not None:
+        formatted = format_monitor_loss(primary_loss.get("latest"))
+        if formatted:
+            metrics["loss"] = formatted
+            metrics["loss_source"] = "tensorboard"
+
+    primary_lr = pick_primary_lr_series(series)
+    if primary_lr is not None:
+        formatted_lr = format_monitor_lr(primary_lr.get("latest"))
+        if formatted_lr:
+            metrics["lr"] = formatted_lr
+            metrics["lr_source"] = "tensorboard"
+
+    config = config or {}
+    epoch_raw = str(metrics.get("epoch") or "").strip()
+    max_epochs = str(config.get("max_train_epochs") or "").strip()
+    if epoch_raw and "/" not in epoch_raw and max_epochs:
+        try:
+            current = int(float(epoch_raw))
+            total = int(float(max_epochs))
+        except ValueError:
+            current = total = 0
+        if current > 0 and total > 0:
+            metrics["epoch"] = f"{current}/{total}"
+
+    return metrics
+
+
 # ---------------------------------------------------------------------------
 # Training config parsing
 # ---------------------------------------------------------------------------
 
 _TOML_STR_KEYS = ("output_dir", "output_name", "optimizer_type", "lr_scheduler",
                    "network_module", "network_args", "train_data_dir", "source_image_dir", "reg_data_dir",
-                   "resolution", "mixed_precision", "model_train_type")
+                   "resolution", "mixed_precision", "model_train_type", "logging_dir")
 _TOML_NUM_KEYS = ("max_train_epochs", "max_train_steps", "learning_rate", "unet_lr",
                    "text_encoder_lr", "network_dim", "network_alpha", "train_batch_size",
                    "gradient_accumulation_steps", "save_every_n_epochs", "save_every_n_steps",
@@ -507,32 +626,69 @@ _TOML_BOOL_KEYS = ("gradient_checkpointing", "full_bf16", "full_fp16",
                    "network_train_unet_only")
 
 
+def parse_training_config_text(text: str, config_path: Path | str | None = None) -> dict:
+    config: dict[str, str] = {}
+    for key in _TOML_STR_KEYS:
+        match = re.search(rf'^{key}\s*=\s*["\'](?P<value>.*?)["\']\s*$', text, flags=re.MULTILINE)
+        if match:
+            config[key] = match.group("value")
+    for key in _TOML_NUM_KEYS:
+        match = re.search(rf'^{key}\s*=\s*(?P<value>[0-9.eE+-]+)\s*$', text, flags=re.MULTILINE)
+        if match:
+            config[key] = match.group("value")
+    for key in _TOML_BOOL_KEYS:
+        match = re.search(rf'^{key}\s*=\s*(?P<value>true|false)\s*$', text, flags=re.MULTILINE | re.IGNORECASE)
+        if match:
+            config[key] = match.group("value").lower()
+    if config_path is not None:
+        config["_config_path"] = str(config_path)
+    return config
+
+
+def load_training_config(path: Path | str) -> dict:
+    config_path = Path(path)
+    if not config_path.is_file():
+        return {}
+    try:
+        text = config_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    return parse_training_config_text(text, config_path)
+
+
+def resolve_training_config(active_task: dict | None = None) -> dict:
+    """Prefer the running task's config_path over newest-autosave-by-mtime."""
+    if isinstance(active_task, dict):
+        metadata = active_task.get("metadata") or {}
+        raw_path = metadata.get("config_path")
+        if raw_path:
+            loaded = load_training_config(str(raw_path))
+            if loaded:
+                return loaded
+    return latest_training_config()
+
+
+def preferred_logging_dir(train_config: dict | None = None, active_task: dict | None = None) -> Path | None:
+    metadata = (active_task or {}).get("metadata") or {} if isinstance(active_task, dict) else {}
+    candidates = [
+        metadata.get("logging_dir"),
+        (train_config or {}).get("logging_dir"),
+    ]
+    for candidate in candidates:
+        resolved = resolve_repo_path(str(candidate or "").strip() or None)
+        if resolved is not None:
+            return resolved
+    return None
+
+
 def latest_training_config() -> dict:
     autosave_dir = REPO / "config/autosave"
     if not autosave_dir.exists():
         return {}
     configs = sorted(autosave_dir.glob("*.toml"), key=lambda p: p.stat().st_mtime, reverse=True)
     for config_path in configs:
-        try:
-            text = config_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        config = {}
-        for key in _TOML_STR_KEYS:
-            match = re.search(rf'^{key}\s*=\s*["\'](?P<value>.*?)["\']\s*$', text, flags=re.MULTILINE)
-            if match:
-                config[key] = match.group("value")
-        for key in _TOML_NUM_KEYS:
-            match = re.search(rf'^{key}\s*=\s*(?P<value>[0-9.eE+-]+)\s*$', text, flags=re.MULTILINE)
-            if match:
-                config[key] = match.group("value")
-        for key in _TOML_BOOL_KEYS:
-            match = re.search(rf'^{key}\s*=\s*(?P<value>true|false)\s*$', text, flags=re.MULTILINE | re.IGNORECASE)
-            if match:
-                config[key] = match.group("value").lower()
-        output_dir = config.get("output_dir")
-        if output_dir:
-            config["_config_path"] = str(config_path)
+        config = load_training_config(config_path)
+        if config.get("output_dir"):
             return config
     return {}
 
@@ -1242,7 +1398,7 @@ def _preview_context(active: dict | None, train_config: dict) -> tuple[Path | No
 
 def collect_status() -> dict:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    train_config = latest_training_config()
+    fallback_config = latest_training_config()
     status = {
         "time": now,
         "gui_online": False,
@@ -1259,8 +1415,10 @@ def collect_status() -> dict:
         "outputs_primary": [],
         "outputs_other": [],
         "output_scope": "",
-        "train_params": _extract_train_params(train_config),
-        "tensorboard_loss": tensorboard_loss_scalars(),
+        "train_params": _extract_train_params(fallback_config),
+        "tensorboard_loss": tensorboard_loss_scalars(
+            preferred_log_dir=preferred_logging_dir(fallback_config)
+        ),
         "gpu_info": gpu_info(),
     }
 
@@ -1278,7 +1436,7 @@ def collect_status() -> dict:
             f"主 GUI API 暂不可用（尝试 {', '.join(gui_api_candidates())}）：{exc}。"
             "训练参数、GPU 状态和 TensorBoard Loss 仍会继续同步。"
         )
-        preview_dir, preview_name, max_epochs = _preview_context(None, train_config)
+        preview_dir, preview_name, max_epochs = _preview_context(None, fallback_config)
         try:
             status["previews"] = newest_preview_images(
                 output_dir=preview_dir,
@@ -1294,6 +1452,14 @@ def collect_status() -> dict:
     active = None
     if status["tasks"]:
         active = next((t for t in reversed(status["tasks"]) if t.get("status") == "RUNNING"), status["tasks"][-1])
+    train_config = resolve_training_config(active) if active else fallback_config
+    status["tensorboard_loss"] = tensorboard_loss_scalars(
+        preferred_log_dir=preferred_logging_dir(train_config, active)
+    )
+    status["train_params"] = _extract_train_params(
+        train_config,
+        engine=infer_training_engine(train_config, active),
+    )
     preview_dir, preview_name, max_epochs = _preview_context(active, train_config)
     try:
         status["previews"] = newest_preview_images(
@@ -1304,7 +1470,7 @@ def collect_status() -> dict:
     except Exception:
         status["previews"] = []
 
-    train_out = preview_dir or _training_output_dir()
+    train_out = preview_dir or resolve_repo_path(str(train_config.get("output_dir", ""))) or _training_output_dir()
     status.update(build_model_outputs(train_out))
 
     if not status["tasks"]:
@@ -1341,6 +1507,7 @@ def collect_status() -> dict:
                 else:
                     status["metrics"] = stdout_metrics
                 metrics = status["metrics"]
+                enrich_metrics_from_tensorboard(metrics, status["tensorboard_loss"], train_config)
                 status["train_params"] = _extract_train_params(train_config, engine=engine, runtime_metrics=metrics)
                 task_status = active.get("status", "")
                 update_progress_health(task_id, task_status, metrics)
