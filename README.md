@@ -179,7 +179,7 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 
 | Date | Version |
 |------|---------|
-| 2026-07-27 | **v2.9.1** — Long-run stability: SSE log stream keeps flowing past 15k lines, bounded task/log history, cached monitor TensorBoard parsing; **T-GLoKR** timestep-gated algo, Beta preview scheduler, lora_type form fixes · see [CHANGELOG.md](CHANGELOG.md) |
+| 2026-07-27 | **v2.9.1** — Long-run stability: SSE log stream keeps flowing past 15k lines, bounded task/log history, cached monitor TensorBoard parsing; **T-GLoKR** timestep-gated algo, Beta preview scheduler, lora_type form fixes; Chinese locale hydration keeps the right-side training controls fully translated · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-22 | **v2.9.0** — Anima Fast bucket-resolution controls, LoKr config preview fixes, offline-first local tagger models, portable data-dir junctions |
 | 2026-06-27 | **v2.8.2** — Portable pack: **SDXL training**, **tagging**, **preview images**, **config import** fixes; bundled tagger + SDXL tokenizer cache · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-05-28 | **v2.7.0** — **Anima LoRA Fast mode** (optional `anima_lora` plugin): WebUI entry, one-click install, train monitor sync, benchmark docs · see [`docs/anima-fast.md`](docs/anima-fast.md) |

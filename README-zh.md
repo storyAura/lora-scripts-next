@@ -270,7 +270,7 @@ powershell -ExecutionPolicy Bypass -File .\install-cn.ps1
 
 | 日期 | 版本 |
 |------|------|
-| 2026-07-27 | **v2.9.1** — 长驻稳定性：日志直播超 1.5 万行不断更、任务/日志历史有界、监控 TensorBoard 解析缓存；**T-GLoKR** 时间步门控算法、预览 Beta 调度器、lora_type 表单修复 · 见 [CHANGELOG.md](CHANGELOG.md) |
+| 2026-07-27 | **v2.9.1** — 长驻稳定性：日志直播超 1.5 万行不断更、任务/日志历史有界、监控 TensorBoard 解析缓存；**T-GLoKR** 时间步门控算法、预览 Beta 调度器、lora_type 表单修复；中文界面水合后右侧训练控件保持完整翻译 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-22 | **v2.9.0** — Anima Fast 桶分辨率控制、LoKr 配置预览修复、本地打标模型离线优先、整合包数据目录 junction |
 | 2026-06-27 | **v2.8.2** — 整合包：**SDXL 训练**、**打标**、**预览图**、**训练配置导入** 四项修复；内置打标模型与 SDXL tokenizer 缓存 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-05-28 | **v2.7.0** — **Anima LoRA Fast 模式**（可选 `anima_lora` 插件）：WebUI 入口、页内安装、训练监控同步、性能对标与用户文档 · 见 [`docs/anima-fast.md`](docs/anima-fast.md) |
