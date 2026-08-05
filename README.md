@@ -11,10 +11,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next/releases"><img src="https://img.shields.io/github/v/release/wochenlong/lora-scripts-next?include_prereleases&style=for-the-badge&color=a78bfa&label=Download" alt="Download"/></a>
-</p>
-
-<p align="center">
   <a href="https://github.com/storyAura/lora-scripts-story-next"><img src="https://img.shields.io/github/stars/storyAura/lora-scripts-story-next?style=flat-square&label=stars&logo=github&color=8b5cf6" alt="stars"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/storyAura/lora-scripts-story-next?style=flat-square&color=ec4899" alt="license"/></a>
 </p>
@@ -30,11 +26,7 @@
 
 ---
 
-<p align="center">
-  <img src="assets/readme/screenshot-webui.png?v=20260805-nst" alt="Next Story Trainer home portal" width="920" />
-</p>
-
-<p align="center"><sub>Home portal — quick links to training, monitor, and onboarding</sub></p>
+<p align="center"><sub>Demo screenshots (train-monitor style) will be added later.</sub></p>
 
 ---
 

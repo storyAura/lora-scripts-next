@@ -11,10 +11,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wochenlong/lora-scripts-next/releases"><img src="https://img.shields.io/github/v/release/wochenlong/lora-scripts-next?include_prereleases&style=for-the-badge&color=a78bfa&label=%E4%B8%8B%E8%BD%BD%E6%95%B4%E5%90%88%E5%8C%85" alt="下载整合包"/></a>
-</p>
-
-<p align="center">
   <a href="https://github.com/storyAura/lora-scripts-story-next"><img src="https://img.shields.io/github/stars/storyAura/lora-scripts-story-next?style=flat-square&label=stars&logo=github&color=8b5cf6" alt="stars"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/storyAura/lora-scripts-story-next?style=flat-square&color=ec4899" alt="license"/></a>
 </p>
@@ -30,11 +26,7 @@
 
 ---
 
-<p align="center">
-  <img src="assets/readme/screenshot-webui.png?v=20260805-nst" alt="Next Story Trainer 首页" width="920" />
-</p>
-
-<p align="center"><sub>首页传送门 — 训练、监控与新手上路快捷入口</sub></p>
+<p align="center"><sub>演示截图（训练监控风格）稍后补齐。</sub></p>
 
 ---
 
