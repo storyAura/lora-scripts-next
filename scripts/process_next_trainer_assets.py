@@ -7,11 +7,13 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "doc" / "local" / "Next Trainer" / "Next Trainer"
-ICON_SRC = SRC / "icon_4.png"
-BANNER_SRC = SRC / "banner.png"
+SRC = ROOT / "doc" / "local" / "Next Story Trainer"
+ICON_SRC = SRC / "app-icon.png"
+if not ICON_SRC.is_file():
+    ICON_SRC = SRC / "next-story-trainer-main-logo-transparent.png"
+BANNER_SRC = SRC / "changelog-banner.png"
 DIST = ROOT / "frontend" / "dist"
-FAVICON_VERSION = "20260525-nt"
+FAVICON_VERSION = "20260805-nst"
 
 
 def cover_resize(img: Image.Image, size: tuple[int, int], bg: tuple[int, int, int] = (255, 255, 255)) -> Image.Image:

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>if (window.self === window.top) { location.replace("/help/training-params.html"); }</script>
-<title>训练参数说明 - SD Trainer</title>
+<title>训练参数说明 - Next Story Trainer</title>
 <style>
 /* 主视觉配色：奶油咖啡单色渐变（与主界面同套），淡白底 + 咖啡字 */
 :root {
@@ -462,5 +462,73 @@ footer.page-foot { color: var(--text-sub); font-size: 13px; text-align: center; 
 <footer class="page-foot">SD Trainer · 训练参数说明 · 算法选择与专属参数见 <a class="back-link" href="/help/algorithms-content.html">训练算法说明</a></footer>
 
 </div>
+
+<script>
+(function () {
+  var STORAGE_KEY = "sd-trainer-ui-locale";
+  function isEnglish() {
+    try {
+      var stored = null;
+      try { stored = parent.localStorage.getItem(STORAGE_KEY); } catch (e1) {}
+      if (!stored) { try { stored = localStorage.getItem(STORAGE_KEY); } catch (e2) {} }
+      if (stored === "en-US") return true;
+      if (stored === "zh-CN") return false;
+      var langs = (parent.navigator && parent.navigator.languages) || navigator.languages || [];
+      return Array.prototype.some.call(langs, function (l) { return String(l).toLowerCase().indexOf("en") === 0; });
+    } catch (e) { return false; }
+  }
+  function normalize(t) { return String(t || "").replace(/\s+/g, " ").trim(); }
+  function applyMap(map) {
+    if (!map) return;
+    var partials = Object.keys(map).filter(function (k) { return k && map[k] && k.length > 2 && k !== map[k]; })
+      .sort(function (a, b) { return b.length - a.length; });
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      var raw = normalize(node.textContent);
+      if (!raw) continue;
+      if (map[raw]) { node.textContent = map[raw]; continue; }
+      var text = node.textContent;
+      var changed = false;
+      for (var i = 0; i < partials.length; i++) {
+        var from = partials[i];
+        if (text.indexOf(from) !== -1) {
+          text = text.split(from).join(map[from]);
+          changed = true;
+        }
+      }
+      if (changed) node.textContent = text;
+    }
+    if (document.documentElement) document.documentElement.lang = "en-US";
+    if (document.title && map[document.title]) document.title = map[document.title];
+  }
+  function run() {
+    if (!isEnglish()) return;
+    fetch("/assets/sd-help-i18n-en.json?v=20260805-i18n")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (dict) {
+        // also merge chrome + schema for shared phrases
+        return Promise.all([
+          Promise.resolve(dict),
+          fetch("/assets/sd-chrome-i18n-en.json?v=20260805-i18n").then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }),
+          fetch("/assets/sd-schema-i18n-en.json?v=20260805-i18n").then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }),
+        ]);
+      })
+      .then(function (parts) {
+        if (!parts) return;
+        var merged = {};
+        parts.forEach(function (p) { if (p) Object.keys(p).forEach(function (k) { merged[k] = p[k]; }); });
+        applyMap(merged);
+      })
+      .catch(function () {});
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
+  else run();
+  window.addEventListener("storage", function (ev) {
+    if (ev.key === STORAGE_KEY) location.reload();
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -43,9 +43,11 @@ html.dark .sd-brand-version-chip {
 
 def script_tags() -> str:
     ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip() or "0"
+    from scripts.spa_asset_cache import SPA_ASSET_CACHE_KEY
+
     return (
         f'<script src="/assets/sd-trainer-brand.js?v={ver}" defer></script>\n'
-        f'    <script src="/assets/sd-nav-i18n.js?v={ver}" defer></script>'
+        f'    <script src="/assets/sd-nav-i18n.js?v={SPA_ASSET_CACHE_KEY}" defer></script>'
     )
 
 
@@ -62,6 +64,8 @@ def ensure_version_css() -> None:
 
 def patch_html_files() -> None:
     ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip() or "0"
+    from scripts.spa_asset_cache import SPA_ASSET_CACHE_KEY
+
     tags = script_tags()
     count = 0
     for path in DIST.rglob("*.html"):
@@ -78,20 +82,23 @@ def patch_html_files() -> None:
         )
         html = re.sub(
             r'src="/assets/sd-nav-i18n\.js(\?v=[^"]*)?"',
-            f'src="/assets/sd-nav-i18n.js?v={ver}"',
+            f'src="/assets/sd-nav-i18n.js?v={SPA_ASSET_CACHE_KEY}"',
             html,
         )
         if NAV_I18N_MARKER not in html and MARKER in html:
             html = html.replace(
                 f'src="/assets/sd-trainer-brand.js?v={ver}" defer></script>',
                 f'src="/assets/sd-trainer-brand.js?v={ver}" defer></script>\n'
-                f'    <script src="/assets/sd-nav-i18n.js?v={ver}" defer></script>',
+                f'    <script src="/assets/sd-nav-i18n.js?v={SPA_ASSET_CACHE_KEY}" defer></script>',
                 1,
             )
         if html != original:
             path.write_text(html, encoding="utf-8")
             count += 1
-    print(f"patched {count} html file(s) (brand + nav i18n v={ver})")
+    print(
+        f"patched {count} html file(s) "
+        f"(brand v={ver}, nav-i18n v={SPA_ASSET_CACHE_KEY})"
+    )
 
 
 def main() -> None:

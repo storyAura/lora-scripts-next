@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="assets/readme/next-trainer-cover.png" alt="Next Trainer" width="880" />
+  <img src="assets/readme/next-story-trainer-cover.png" alt="Next Story Trainer" width="880" />
 </p>
 
-<h1 align="center">lora-scripts-story-next</h1>
+<h1 align="center">Next Story Trainer</h1>
 
 <p align="center">
   <b>One-click LoRA &amp; full finetune training GUI for Windows</b> — supports <b>Anima</b> / SD 1.5 / SDXL / Flux<br/>
   Extract and run. No environment setup needed. ~12 GB VRAM for Anima LoRA; <b>Anima full finetune needs ~24 GB</b>.<br/>
-  <sub>Powered by <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>, Akegarasu-style GUI. A personal fork of <a href="https://github.com/wochenlong/lora-scripts-next">wochenlong/lora-scripts-next</a> (Next Trainer).</sub>
+  <sub>Powered by <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>, Akegarasu-style GUI. Maintained at <a href="https://github.com/storyAura/lora-scripts-story-next">storyAura/lora-scripts-story-next</a>. Upstream: <a href="https://github.com/wochenlong/lora-scripts-next">wochenlong/lora-scripts-next</a>.</sub>
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@
 ---
 
 <p align="center">
-  <img src="assets/readme/screenshot-webui.png?v=20260528" alt="Next Trainer home portal" width="920" />
+  <img src="assets/readme/screenshot-webui.png?v=20260805-nst" alt="Next Story Trainer home portal" width="920" />
 </p>
 
 <p align="center"><sub>Home portal — quick links to training, monitor, and onboarding</sub></p>
@@ -89,19 +89,19 @@ Python **3.10** recommended. See [Flash Attention 2 docs](docs/flash-attention.m
 | Flux | LoRA | xformers / SDPA |
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-lora.png?v=20260528" alt="Anima LoRA training UI" width="920" />
+  <img src="assets/readme/screenshot-anima-lora.png?v=20260805-nst" alt="Anima LoRA training UI" width="920" />
 </p>
 
 <p align="center"><sub>Anima LoRA — sidebar, model &amp; dataset form, config preview on the right</sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-fast.png?v=20260528" alt="Anima LoRA Fast mode UI" width="920" />
+  <img src="assets/readme/screenshot-anima-fast.png?v=20260805-nst" alt="Anima LoRA Fast mode UI" width="920" />
 </p>
 
 <p align="center"><sub>Anima LoRA Fast — optional plugin path under <b>标准模式 / Fast 模式</b>; install the runtime with <code>scripts/cli/install_anima_fast.*</code> (recommended — full terminal output) or the in-page button. See <a href="docs/anima-fast.md">docs/anima-fast.md</a></sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-finetune.png?v=20260528" alt="Anima full finetune UI" width="920" />
+  <img src="assets/readme/screenshot-anima-finetune.png?v=20260805-nst" alt="Anima full finetune UI" width="920" />
 </p>
 
 <p align="center"><sub>Anima Finetune — full DiT weights under <b>Full Finetune</b> in the sidebar</sub></p>
@@ -115,6 +115,8 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 **Hardened for long runs (v2.9.1+):** live log streaming keeps flowing past 15,000 lines, task/log history is memory-bounded so multi-day sessions don't accumulate RAM, and TensorBoard curve parsing is cached between polls.
 
 **v2.9.2:** stopping a run now waits until the full process tree is dead before the next job can start (fixes dual-training Loss/Epoch jumps); monitor Loss, LR, and params stay bound to the active task and TensorBoard.
+
+**v2.9.3:** GSoKR BF16 merge path fixed; Next Story Trainer brand assets landed; English UI dictionaries (Chrome / Schema / Help) with whole-block Markdown description translation; contact + GitHub point to storyAura; LoRA training intro synced.
 
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png" alt="Train Monitor Dashboard" width="920" />
@@ -181,6 +183,7 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 
 | Date | Version |
 |------|---------|
+| 2026-08-05 | **v2.9.3** — GSoKR BF16 merge fix; Next Story Trainer brand assets; English i18n (incl. Schema Markdown help); contact / GitHub → storyAura; LoRA training intro synced · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-08-04 | **v2.9.2** — **Critical:** stop-then-restart dual-training (orphaned process tree) fixed; monitor Loss / LR / params stay bound to the active task and TensorBoard · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-27 | **v2.9.1** — Long-run stability: SSE log stream keeps flowing past 15k lines, bounded task/log history, cached monitor TensorBoard parsing; **T-GLoKR** timestep-gated algo, Beta preview scheduler, lora_type form fixes; Chinese locale hydration keeps the right-side training controls fully translated · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-22 | **v2.9.0** — Anima Fast bucket-resolution controls, LoKr config preview fixes, offline-first local tagger models, portable data-dir junctions |

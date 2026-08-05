@@ -266,9 +266,13 @@ class GloKrSoraModule(LycorisBaseModule):
         return diff, None
 
     def get_merged_weight(self, multiplier=1, shape=None, device=None):
+        # Merge in fp32 so small BF16 updates are not absorbed by base+diff-base.
         diff = self.get_diff_weight(multiplier=multiplier, shape=shape, device=device)[0]
-        merged = self.org_weight + diff
-        return merged, None
+        base = self.org_weight
+        if device is not None:
+            base = base.to(device)
+        merged = base.float() + diff.float()
+        return merged.to(dtype=base.dtype), None
 
     def bypass_forward_diff(self, x, scale=1.0):
         # 1. 隐式计算 A(x) = x @ A^T
@@ -289,27 +293,6 @@ class GloKrSoraModule(LycorisBaseModule):
 
     def bypass_forward(self, x, scale=1.0):
         return self.org_forward(x) + self.bypass_forward_diff(x, scale=scale)
-
-    def forward(self, x: torch.Tensor, *args, **kwargs):
-        if self.module_dropout and self.training:
-            if torch.rand(1) < self.module_dropout:
-                return self.org_forward(x, *args, **kwargs)
-
-        if self.bypass_mode and not self.use_sora:
-            return self.bypass_forward(x, self.multiplier)
-
-        base = self.org_forward(x, *args, **kwargs)
-        base_weight = self._current_weight().to(x.device)
-        diff_weight = self.get_weight(self.shape).to(base_weight.dtype) * self.scalar
-
-        if self.multiplier == 1:
-            new_weight = base_weight + diff_weight
-        else:
-            new_weight = base_weight + diff_weight * self.multiplier
-
-        delta_weight = new_weight - base_weight
-        delta = self.op(x, delta_weight, None, **self.kw_dict)
-        return base + delta
 
     def custom_state_dict(self):
         destination = {}
@@ -407,6 +390,8 @@ class GloKrSoraModule(LycorisBaseModule):
         return scaled, orig_norm * ratio
 
     def forward(self, x: torch.Tensor, *args, **kwargs):
+        # Merged path must apply get_weight() as a *delta* directly.
+        # Never do (base_bf16 + diff) - base_bf16: tiny updates are absorbed in BF16.
         if self.module_dropout and self.training:
             if torch.rand(1) < self.module_dropout:
                 return self.org_forward(x, *args, **kwargs)
@@ -416,9 +401,12 @@ class GloKrSoraModule(LycorisBaseModule):
 
         base = self.org_forward(x, *args, **kwargs)
         base_weight = self._current_weight().to(x.device)
-        diff_weight = self.get_weight(self.shape).to(base_weight.dtype) * self.scalar
-
-        delta_weight = diff_weight if self.multiplier == 1 else diff_weight * self.multiplier
-
+        # get_weight already returns W@A+B (the GLoRA delta), not a full reconstructed W.
+        diff_weight = self.get_weight(self.shape).to(
+            device=base_weight.device, dtype=base_weight.dtype
+        ) * self.scalar
+        delta_weight = (
+            diff_weight if self.multiplier == 1 else diff_weight * self.multiplier
+        )
         delta = self.op(x, delta_weight, None, **self.kw_dict)
         return base + delta

@@ -1,7 +1,7 @@
 [metadata]
 name = "Anima Fast LoRA - 角色通用"
 version = "1.0"
-author = "SD-Trainer Next"
+author = "Next Story Trainer"
 train_type = "anima-lora-fast"
 description = "适合需要更快训练的角色 LoRA。Fast 插件当前不支持 Automagic，因此使用 AdamW8bit。"
 

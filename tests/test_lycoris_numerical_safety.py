@@ -98,6 +98,18 @@ def build_merged_module(
             alpha=1,
             use_data_init=True,
         )
+    elif module_name == "gsokr":
+        from lycoris.modules.gsokr import GloKrSoraModule
+
+        module = GloKrSoraModule(
+            "test_gsokr",
+            base,
+            multiplier=multiplier,
+            lora_dim=1,
+            alpha=1,
+            factor=-1,
+            bypass_mode=False,
+        )
     else:
         raise ValueError(f"Unsupported test module: {module_name}")
 
@@ -113,7 +125,7 @@ def capture_forward_delta(
     controlled_diff = torch.full((4, 4), diff_value, dtype=torch.float32)
     captured: list[torch.Tensor] = []
 
-    if module_name in {"lokr", "loha"}:
+    if module_name in {"lokr", "loha", "gsokr"}:
         module.get_weight = lambda shape: controlled_diff
     elif module_name in {"locon", "bora_locon", "bora"}:
         module.make_weight = lambda device: controlled_diff.to(device)
@@ -202,6 +214,7 @@ class MergedModulePrecisionTests(unittest.TestCase):
             ("bora", False),
             ("bora", True),
             ("tlora", False),
+            ("gsokr", False),
         )
 
         for module_name, weight_decompose in cases:
@@ -235,6 +248,7 @@ class MergedModulePrecisionTests(unittest.TestCase):
             ("bora", False),
             ("bora", True),
             ("tlora", False),
+            ("gsokr", False),
         )
 
         for module_name, weight_decompose in cases:

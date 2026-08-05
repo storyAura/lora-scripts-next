@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="assets/readme/next-trainer-cover.png" alt="Next Trainer" width="880" />
+  <img src="assets/readme/next-story-trainer-cover.png" alt="Next Story Trainer" width="880" />
 </p>
 
-<h1 align="center">lora-scripts-story-next</h1>
+<h1 align="center">Next Story Trainer</h1>
 
 <p align="center">
   <b>Windows 一键 LoRA / 全量微调训练工具</b> — 支持 <b>Anima</b> / SD 1.5 / SDXL / Flux<br/>
   解压即用，无需配环境。Anima LoRA 约 12GB 显存即可起步；<b>Anima 全量微调建议 24GB 级显存</b>。<br/>
-  <sub>基于 <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>，秋叶系 GUI 体验。个人分支，上游为 <a href="https://github.com/wochenlong/lora-scripts-next">wochenlong/lora-scripts-next</a>（Next Trainer）。</sub>
+  <sub>基于 <a href="https://github.com/kohya-ss/sd-scripts">kohya-ss/sd-scripts</a>，秋叶系 GUI 体验。仓库 <a href="https://github.com/storyAura/lora-scripts-story-next">storyAura/lora-scripts-story-next</a>；上游为 <a href="https://github.com/wochenlong/lora-scripts-next">wochenlong/lora-scripts-next</a>。</sub>
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@
 ---
 
 <p align="center">
-  <img src="assets/readme/screenshot-webui.png?v=20260528" alt="Next Trainer 首页" width="920" />
+  <img src="assets/readme/screenshot-webui.png?v=20260805-nst" alt="Next Story Trainer 首页" width="920" />
 </p>
 
 <p align="center"><sub>首页传送门 — 训练、监控与新手上路快捷入口</sub></p>
@@ -89,19 +89,19 @@ bash install_flash_attn.sh
 | Flux | LoRA | xformers / SDPA |
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-lora.png?v=20260528" alt="Anima LoRA 训练界面" width="920" />
+  <img src="assets/readme/screenshot-anima-lora.png?v=20260805-nst" alt="Anima LoRA 训练界面" width="920" />
 </p>
 
 <p align="center"><sub>Anima LoRA — 侧栏导航、中栏模型与数据集表单、右栏配置预览</sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-fast.png?v=20260528" alt="Anima LoRA Fast 模式界面" width="920" />
+  <img src="assets/readme/screenshot-anima-fast.png?v=20260805-nst" alt="Anima LoRA Fast 模式界面" width="920" />
 </p>
 
 <p align="center"><sub>Anima LoRA Fast — 侧栏「标准模式 / Fast 模式」；推荐用 <code>scripts/cli/install_anima_fast.*</code> 命令行脚本安装（终端可见报错），也可用页内按钮。见 <a href="docs/anima-fast.md">docs/anima-fast.md</a></sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-finetune.png?v=20260528" alt="Anima 全量微调界面" width="920" />
+  <img src="assets/readme/screenshot-anima-finetune.png?v=20260805-nst" alt="Anima 全量微调界面" width="920" />
 </p>
 
 <p align="center"><sub>Anima 全量微调 — 侧栏「全量微调 → Anima Finetune」，更新完整 DiT 权重</sub></p>
@@ -115,6 +115,8 @@ bash install_flash_attn.sh
 **为长时间训练加固（v2.9.1+）**：日志直播超过 1.5 万行不再断更；任务与日志历史占用有上限，挂机多天不再越吃越多内存；监控页 TensorBoard 曲线解析带缓存。
 
 **v2.9.2**：停止后再立刻开训时，旧训练进程树会杀干净后再启动下一场，避免「双训练」导致 Loss/Epoch 乱跳；监控页 Loss、学习率与参数绑定当前任务与 TensorBoard。
+
+**v2.9.3**：GSoKR BF16 合并路径修正；落地 Next Story Trainer 品牌素材；英文界面词表（Chrome / Schema / Help）与 Markdown 说明整块翻译；联系方式与 Github 指向 storyAura；LoRA 训练页介绍对齐。
 
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png" alt="训练监控仪表盘" width="920" />
@@ -272,6 +274,7 @@ powershell -ExecutionPolicy Bypass -File .\install-cn.ps1
 
 | 日期 | 版本 |
 |------|------|
+| 2026-08-05 | **v2.9.3** — GSoKR BF16 合并修正；Next Story Trainer 品牌素材；英文 i18n（含 Schema Markdown 说明）；联系方式 / Github → storyAura；LoRA 训练页介绍对齐 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-08-04 | **v2.9.2** — **严重**：停止后再开训可能双训练（旧进程未杀净）已修；监控页 Loss/学习率/参数与当前任务、TensorBoard 对齐 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-27 | **v2.9.1** — 长驻稳定性：日志直播超 1.5 万行不断更、任务/日志历史有界、监控 TensorBoard 解析缓存；**T-GLoKR** 时间步门控算法、预览 Beta 调度器、lora_type 表单修复；中文界面水合后右侧训练控件保持完整翻译 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-22 | **v2.9.0** — Anima Fast 桶分辨率控制、LoKr 配置预览修复、本地打标模型离线优先、整合包数据目录 junction |

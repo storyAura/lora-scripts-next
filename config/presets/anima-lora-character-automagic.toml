@@ -1,7 +1,7 @@
 [metadata]
 name = "Anima LoRA - 角色通用（Automagic）"
 version = "1.0"
-author = "SD-Trainer Next"
+author = "Next Story Trainer"
 train_type = "anima-lora"
 description = "适合单角色、服装、道具等常规角色 LoRA。使用 Automagic，适合新手作为默认预设。"
 

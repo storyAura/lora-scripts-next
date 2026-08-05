@@ -3,6 +3,32 @@
 本文件记录 **storyAura/lora-scripts-story-next** 的发行说明（v2.9.0 及更早条目沿袭上游 wochenlong/lora-scripts-next）；kohya-ss/sd-scripts 的变更请见其仓库。
 
 ---
+## v2.9.3 — 2026-08-05
+
+### 训练正确性
+
+- **GSoKR**：去掉会在 BF16 下把微小更新「加基座再减回去」吸收掉的死 `forward`；合并权重改为 fp32 后再写回；补数值回归测试，并同步 vendored LyCORIS 到 venv。
+
+### 品牌与发布身份
+
+- **品牌素材**：落地 `Next Story Trainer` Logo / favicon / 首页图 / Changelog 横幅 / README 封面；公开文档见 `docs/brand-design-tokens.md`、`docs/brand-refresh-change-plan.md`。
+- 全站 `sd-trainer-brand.js?v=` 与 `VERSION` 对齐（不再钉死旧的 2.8.35）；`sd-nav-i18n` 继续走 SPA 缓存键，避免双份 bundle。
+- 首页 Author / Github、侧栏 Github 指向 `storyAura/lora-scripts-story-next`；关于页联系方式改为 `storyaura@outlook.com` 与 QQ 群 `917336925`。
+- LoRA 训练页介绍与 hydration 对齐（Anima / Flux / Stable Diffusion），去掉旧的「新手/专家 TIP」残留。
+
+### 英文界面（i18n）
+
+- 外置词表：`sd-chrome-i18n-en.json` / `sd-schema-i18n-en.json` / `sd-help-i18n-en.json`；`sd-nav-i18n.js` 按需加载。
+- Schema 字段说明走 Markdown 时按整块 `.markdown` 翻译，避免 `` `code` `` / `*em*` 拆节点导致中文残留。
+- 品牌名保护：禁止把「下一页 → Next」子串替换进 `Next Story Trainer`。
+- 队列面板、帮助页、首页简介等 Chrome 文案补齐英译。
+
+### 验证
+
+- 标准 Anima LoRA / LoKr / T-LoRA / 续训短步数冒烟在本机 8GB 卡上全部通过。
+- 静态回归：`tests/test_contact_and_i18n_static.py`、SPA 缓存键、Changelog hydration 模板与 SSR 一致。
+
+---
 ## v2.9.2 — 2026-08-04
 
 ### 严重：停止后再开训可能「双训练」

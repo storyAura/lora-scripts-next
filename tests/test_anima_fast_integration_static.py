@@ -169,12 +169,16 @@ class AnimaFastStaticIntegrationTests(unittest.TestCase):
         version = Path("VERSION").read_text(encoding="utf-8").strip()
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
 
+        from scripts.spa_asset_cache import SPA_ASSET_CACHE_KEY
+
         for path in Path("frontend/dist").rglob("*.html"):
             html = path.read_text(encoding="utf-8")
             if "sd-trainer-brand.js" in html:
+                # brand.js is served no-cache; query tracks VERSION for identity.
                 self.assertIn(f"sd-trainer-brand.js?v={version}", html, path)
             if "sd-nav-i18n.js" in html:
-                self.assertIn(f"sd-nav-i18n.js?v={version}", html, path)
+                # nav i18n rides the shared SPA cache key (see spa_asset_cache.py).
+                self.assertIn(f"sd-nav-i18n.js?v={SPA_ASSET_CACHE_KEY}", html, path)
 
     def test_benchmark_example_configs_exist(self):
         examples = Path("docs/examples")

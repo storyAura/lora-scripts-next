@@ -48,7 +48,7 @@ def get_old_sidebar_from_file() -> str:
 
 
 NEW_SIDEBAR_JSON = (
-    '[{"text":"Next Trainer","link":"/"},'
+    '[{"text":"Next Story Trainer","link":"/"},'
     '{"text":"训练","children":['
     '{"text":"LoRA 训练","link":"/lora/index.md","collapsible":false,"children":['
     '{"text":"Anima LoRA","link":"/lora/sd3.md","collapsible":false,"children":['
@@ -186,8 +186,8 @@ def build_sidebar_html(rel_path: str) -> str:
     )
 
     return (
-        '<li><a href="/" class="sidebar-item sidebar-heading" aria-label="Next Trainer">'
-        "<!--[--><!--]--> Next Trainer <!--[--><!--]--></a><!----></li>"
+        '<li><a href="/" class="sidebar-item sidebar-heading" aria-label="Next Story Trainer">'
+        "<!--[--><!--]--> Next Story Trainer <!--[--><!--]--></a><!----></li>"
         + train_block
         + tools_block
         + help_block

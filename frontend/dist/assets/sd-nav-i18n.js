@@ -48,9 +48,13 @@
     新手上路: "Getting Started",
     训练参数说明: "Training Parameters",
     训练算法说明: "Training Algorithms",
+    "训练算法说明（lora_type 全解）": "Training Algorithms (lora_type guide)",
     其他: "More",
     "UI 设置": "UI Settings",
+    "训练 UI 设置": "Training UI Settings",
     关于: "About",
+    反馈: "Feedback",
+    联系方式: "Contact",
     更新日志: "Changelog",
     终端: "Terminal",
     训练终端: "Training Terminal",
@@ -148,11 +152,108 @@
     状态检查失败: "Status check failed",
     安装任务启动中: "Starting install task",
     安装失败: "Install failed",
+    由: "Powered by",
+    强力驱动: "",
+    "请前往 Github 提交": "Please submit a",
+    "邮箱：": "Email: ",
+    "QQ 群：": "QQ group: ",
+    "discord 频道": "QQ group: 917336925",
+    "tensorboard 地址": "TensorBoard URL",
+    不懂的不要碰这个: "Don't change this unless you know what it does",
+    已自动加载历史参数: "Historical parameters loaded automatically",
+    训练队列: "Training Queue",
+    "从秋叶版迁移": "Migration from Akiba lora-scripts",
+    上一页: "Previous page",
+    下一页: "Next page",
+    "← 返回 Anima LoRA 训练页": "← Back to Anima LoRA training",
+    新手速查: "Quick start",
+    "新手速查：真正需要动的参数": "Quick start: parameters you actually need",
+    参数: "Parameter",
+    建议: "Suggestion",
+    为什么: "Why",
+    说明: "Description",
+    默认: "Default",
+    数据集: "Dataset",
+    保存: "Save",
+    训练核心: "Training core",
+    "学习率与优化器": "Learning rate & optimizer",
+    算法专属参数: "Algorithm-specific parameters",
+    预览图: "Sample previews",
+    "Caption 标签": "Caption / tags",
+    噪声: "Noise",
+    "速度与显存": "Speed & VRAM",
+    日志: "Logging",
+    "其他与分布式": "Misc & distributed",
+    显存不够怎么办: "If you run out of VRAM",
+    "过拟合 / 欠拟合": "Overfitting / underfitting",
+    "Anima 专用": "Anima-specific",
+    "准备数据": "Prepare data",
+    "选择训练类型": "Choose training type",
+    "填写参数并开训": "Fill in parameters and start training",
+    "查看进度": "Check progress",
+    "前往 Fast 训练页": "Open Fast training page",
   };
 
-  const EN_TO_ZH = Object.fromEntries(
-    Object.entries(ZH_TO_EN).map(([zh, en]) => [en, zh])
-  );
+  function rebuildEnToZh() {
+    // Skip short/ambiguous English values so reverse replace cannot corrupt
+    // brand text like "Next Story Trainer" via 下一页→Next.
+    const AMBIGUOUS_EN = new Set([
+      "Next", "Previous", "Help", "More", "Save", "All", "Theme",
+      "Tools", "About", "Contact", "Feedback", "Logging", "Noise",
+      "Dataset", "Parameter", "Suggestion", "Why", "Description",
+      "Default", "Training", "Deploy", "System", "Idle", "Failed",
+      "Done", "Queued", "Paused", "Running", "Editing", "Clear",
+    ]);
+    return Object.fromEntries(
+      Object.entries(ZH_TO_EN)
+        .filter(([zh, en]) => en && en !== zh && !AMBIGUOUS_EN.has(en))
+        .map(([zh, en]) => [en, zh])
+    );
+  }
+  let EN_TO_ZH = rebuildEnToZh();
+
+  const DICT_CACHE_KEY = (function () {
+    try {
+      const src = document.currentScript && document.currentScript.src;
+      if (!src) return "1";
+      const m = /[?&]v=([^&]+)/.exec(src);
+      return m ? m[1] : "1";
+    } catch (e) {
+      return "1";
+    }
+  })();
+
+  let dictsReady = false;
+  function mergeExternalDict(dict) {
+    if (!dict || typeof dict !== "object") return;
+    Object.assign(ZH_TO_EN, dict);
+    EN_TO_ZH = rebuildEnToZh();
+  }
+  function loadExternalDicts(done) {
+    if (dictsReady) {
+      done();
+      return;
+    }
+    const files = [
+      "/assets/sd-chrome-i18n-en.json",
+      "/assets/sd-schema-i18n-en.json",
+      "/assets/sd-help-i18n-en.json",
+    ];
+    let pending = files.length;
+    files.forEach((url) => {
+      fetch(url + "?v=" + encodeURIComponent(DICT_CACHE_KEY))
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then((dict) => {
+          mergeExternalDict(dict);
+          pending -= 1;
+          if (pending <= 0) {
+            dictsReady = true;
+            done();
+          }
+        });
+    });
+  }
   const TERMINAL_MENU_PATH = "/task.html";
   const TERMINAL_PANEL_ID = "sd-terminal-panel";
   const TERMINAL_STYLE_ID = "sd-terminal-style";
@@ -225,23 +326,90 @@
     node.textContent = " " + text + " ";
   }
 
+  function stripMarkdownMarkers(text) {
+    return normalize(
+      String(text || "")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+    );
+  }
+
+  function buildDescriptionLookup(map) {
+    const lookup = new Map();
+    Object.entries(map || {}).forEach(([from, to]) => {
+      if (!from || !to || from === to) return;
+      lookup.set(normalize(from), to);
+      const stripped = stripMarkdownMarkers(from);
+      if (stripped && !lookup.has(stripped)) lookup.set(stripped, stripMarkdownMarkers(to) || to);
+    });
+    return lookup;
+  }
+
+  // Schema field help is rendered via k-markdown (`div.markdown` / `span.markdown`).
+  // Markdown splits `code` / *em* / **strong** into separate text nodes, so whole-string
+  // dict keys never match. Translate the joined textContent of each block first.
+  function translateMarkdownBlocks(root, map) {
+    if (!root) return;
+    const lookup = buildDescriptionLookup(map);
+    root.querySelectorAll(".markdown").forEach((el) => {
+      const text = normalize(el.textContent);
+      if (!text) return;
+      const hit = lookup.get(text) || lookup.get(stripMarkdownMarkers(text));
+      if (hit) {
+        el.textContent = hit;
+        return;
+      }
+      // Longest dict key whose stripped form is contained in this block.
+      let bestFrom = "";
+      let bestTo = "";
+      lookup.forEach((to, from) => {
+        if (from.length <= 4 || from.length <= bestFrom.length) return;
+        if (text.includes(from)) {
+          bestFrom = from;
+          bestTo = to;
+        }
+      });
+      if (bestFrom && bestFrom.length >= Math.min(12, text.length) && bestFrom.length >= text.length * 0.5) {
+        el.textContent = bestTo;
+      }
+    });
+  }
+
   function replaceInElement(el, map) {
     if (!el) return;
+    const BRAND = "Next Story Trainer";
+    const partials = Object.entries(map)
+      .filter(([from, to]) => from && to && from.length > 2 && from !== to)
+      .sort((a, b) => b[0].length - a[0].length);
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) {
       const raw = normalize(node.textContent);
       if (!raw) continue;
-      if (map[raw]) {
+      // Brand name is never localized via substring replace.
+      if (raw === BRAND || raw.includes(BRAND)) continue;
+      if (map[raw] !== undefined && map[raw] !== "") {
         setNodeText(node, map[raw]);
         continue;
       }
-      for (const [from, to] of Object.entries(map)) {
-        if (raw.includes(from) && from.length > 2) {
-          node.textContent = node.textContent.split(from).join(to);
-          break;
+      let text = node.textContent;
+      let changed = false;
+      for (const [from, to] of partials) {
+        if (!text.includes(from)) continue;
+        if (/^[A-Za-z0-9]/.test(from)) {
+          const re = new RegExp("\\b" + from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g");
+          const next = text.replace(re, to);
+          if (next !== text) {
+            text = next;
+            changed = true;
+          }
+        } else {
+          text = text.split(from).join(to);
+          changed = true;
         }
       }
+      if (changed) node.textContent = text;
     }
     el.querySelectorAll("[aria-label]").forEach((a) => {
       const label = normalize(a.getAttribute("aria-label"));
@@ -250,6 +418,25 @@
     el.querySelectorAll("[title]").forEach((a) => {
       const title = normalize(a.getAttribute("title"));
       if (map[title]) a.setAttribute("title", map[title]);
+    });
+  }
+
+  function syncHelpIframeLocale(english) {
+    document.querySelectorAll("iframe").forEach((iframe) => {
+      const src = iframe.getAttribute("src") || "";
+      if (!src.includes("/help/training-params-content") && !src.includes("/help/algorithms-content")) {
+        return;
+      }
+      const wantEn = !!english;
+      const marked = iframe.dataset.sdHelpLocale === "en";
+      if (wantEn === marked) return;
+      iframe.dataset.sdHelpLocale = wantEn ? "en" : "zh";
+      // Reload so the content-page i18n script re-reads parent locale.
+      try {
+        iframe.contentWindow.location.reload();
+      } catch (e) {
+        iframe.setAttribute("src", src);
+      }
     });
   }
 
@@ -937,14 +1124,39 @@
     const main = document.querySelector(".right-container .theme-default-content main");
     if (main) replaceInElement(main, map);
 
+    const pageContent = document.querySelector("main.page .theme-default-content");
+    if (pageContent) replaceInElement(pageContent, map);
+
+    const guide = document.querySelector(".sd-guide");
+    if (guide) replaceInElement(guide, map);
+
     const schemaForm = document.querySelector("section.schema-container");
-    if (schemaForm) replaceInElement(schemaForm, map);
+    if (schemaForm) {
+      translateMarkdownBlocks(schemaForm, map);
+      replaceInElement(schemaForm, map);
+    }
 
     const rightHeader = document.querySelector(".right-container section > header");
     if (rightHeader) replaceInElement(rightHeader, map);
 
     const buttons = document.querySelector(".right-container .el-row");
     if (buttons) replaceInElement(buttons.closest(".right-container") || buttons, map);
+
+    const rightContainer = document.querySelector(".right-container, .k-schema-right");
+    if (rightContainer) {
+      translateMarkdownBlocks(rightContainer, map);
+      replaceInElement(rightContainer, map);
+    }
+
+    const queueOverlay = document.getElementById("sd-queue-overlay");
+    if (queueOverlay) replaceInElement(queueOverlay, map);
+
+    const toastWrap = document.querySelector(".el-message-container, body > .el-message");
+    if (toastWrap) replaceInElement(toastWrap, map);
+    document.querySelectorAll(".el-message__content").forEach((n) => {
+      const parent = n.parentElement;
+      if (parent) replaceInElement(parent, map);
+    });
 
     const tagline = document.querySelector(".sd-anima-finetune-tagline");
     if (tagline && english) {
@@ -953,6 +1165,7 @@
       tagline.textContent = "anima-finetune ，一切皆有可能";
     }
 
+    syncHelpIframeLocale(english);
     ensureTerminalPanel();
   }
 
@@ -994,9 +1207,14 @@
     redirectLegacyParamsPage();
     hookLegacyParamsLinks();
     ensureAnimaLokrConfigGuard();
-    applyNavLocale();
-    hookLanguageToggle();
-    ensureTerminalPanel();
+    const start = () => {
+      applyNavLocale();
+      hookLanguageToggle();
+      ensureTerminalPanel();
+    };
+    loadExternalDicts(start);
+    // Apply once immediately with the built-in map, then again after dicts load.
+    start();
 
     const root = document.querySelector("#app");
     if (root) {

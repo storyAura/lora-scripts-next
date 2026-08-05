@@ -91,7 +91,7 @@
       chip = document.createElement("div");
       chip.id = CHIP_ID;
       chip.className = "sd-brand-version-chip";
-      chip.setAttribute("title", "Next Story Trainer / SD-Trainer 版本号");
+      chip.setAttribute("title", "Next Story Trainer 版本号");
       document.body.appendChild(chip);
     }
     chip.textContent = "v" + version;

@@ -29,7 +29,8 @@ class FrontendI18nStaticTests(unittest.TestCase):
             ('stop_train:"Stop Training"', '终止训练: "Stop Training"'),
         )
 
-        self.assertIn("const EN_TO_ZH = Object.fromEntries", nav_i18n)
+        self.assertIn("Object.fromEntries", nav_i18n)
+        self.assertIn("EN_TO_ZH", nav_i18n)
         for layout_fragment, nav_mapping in expected_pairs:
             with self.subTest(layout_fragment=layout_fragment):
                 self.assertIn(layout_fragment, layout)

@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
-title SD-Trainer
+title Next Story Trainer
 
 :: Portable launcher logic (lives inside SD-Trainer/, updates with git pull / new 7z copy)
 :: Stable paths relative to PORTABLE_ROOT (parent of SD-Trainer\):
@@ -20,7 +20,7 @@ set "PYTHON_EXE=%PORTABLE_ROOT%python_embeded\python.exe"
 set "LOG_FILE=%PORTABLE_ROOT%sd-trainer-log.txt"
 
 echo ============================================ > "%LOG_FILE%"
-echo  SD-Trainer Launch Log >> "%LOG_FILE%"
+echo  Next Story Trainer Launch Log >> "%LOG_FILE%"
 echo  Time: %date% %time% >> "%LOG_FILE%"
 echo  Path: %BASE_DIR% >> "%LOG_FILE%"
 echo  Python: %PYTHON_EXE% >> "%LOG_FILE%"
@@ -79,7 +79,7 @@ if exist "scripts\prefetch_sdxl_tokenizer.py" (
 
 echo [launch] Starting gui.py >> "%LOG_FILE%"
 echo.
-echo  Starting SD-Trainer...
+echo  Starting Next Story Trainer...
 echo  运行日志（打标下载进度、错误信息等）将显示在本窗口。
 echo.
 

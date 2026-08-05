@@ -8,20 +8,20 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "doc" / "local" / "Next Trainer" / "Next Trainer"
+SRC = ROOT / "doc" / "local" / "Next Story Trainer"
 DIST = ROOT / "frontend" / "dist"
 ASSETS = DIST / "assets"
-ASSET_VERSION = "20260525-nt5"
+ASSET_VERSION = "20260805-nst"
 
 HOME_LOGO = f"/assets/home-logo.webp?v={ASSET_VERSION}"
 GUIDE_MASCOT = f"/assets/guide-mascot.webp?v={ASSET_VERSION}"
 CHANGELOG_BANNER = f"/assets/changelog-banner.webp?v={ASSET_VERSION}"
 
-GUIDE_BODY = f"""<div class="sd-guide"><div class="sd-guide-intro"><div class="sd-guide-intro__art" aria-hidden="true"><img src="{GUIDE_MASCOT}" alt="" loading="lazy" decoding="async"></div><div class="sd-guide-intro__body"><h2 id="新手上路" tabindex="-1"><a class="header-anchor" href="#新手上路" aria-hidden="true">#</a> 新手上路</h2><ol><li><strong>准备数据</strong>：训练图片 + 同名 <code>.txt</code> 标签；可用「工具与调试 → 数据集打标」。</li><li><strong>选择训练类型</strong>（侧栏「训练」）：<ul><li><a href="/lora/sd3.html"><strong>Anima</strong></a> — Anima DiT（推荐）</li><li><a href="/lora/flux.html"><strong>Flux</strong></a></li><li><a href="/lora/master.html"><strong>Stable Diffusion</strong></a> — 默认 SDXL</li><li><a href="/dreambooth/index.html"><strong>Dreambooth 训练</strong></a></li></ul></li><li><strong>填写参数并开训</strong>：中栏表单 → 右栏「开始训练」。</li><li><strong>查看进度</strong>：<a href="/train-monitor" target="_blank" rel="noopener noreferrer">训练监控</a>、<a href="/tensorboard.html">Tensorboard</a>。</li></ol></div></div><section class="sd-guide-migrate"><h2 id="从秋叶版迁移" tabindex="-1"><a class="header-anchor" href="#从秋叶版迁移" aria-hidden="true">#</a> 从秋叶版迁移</h2><p>若你使用过 <strong>Akegarasu/lora-scripts</strong>（秋叶一键包），本版主要变化：</p><ul><li><strong>品牌</strong>：项目名 <strong>lora-scripts-next</strong> / Next Trainer，侧栏按「训练 / 工具 / 帮助 / 其他」分组。</li><li><strong>导航</strong>：LoRA 下为 Anima、Flux、Stable Diffusion；原「新手 / 专家」不再平铺（SD1.5 精简页：<a href="/lora/basic.html">/lora/basic.html</a>）。</li><li><strong>Anima</strong>：原 SD3 入口改为 Anima（Qwen + T5 + DiT）。</li><li><strong>监控</strong>：独立 <a href="/train-monitor" target="_blank" rel="noopener noreferrer">训练监控页</a>、Loss 曲线、<code>/train-log</code> 日志流。</li><li>更多版本说明见 <a href="/other/changelog.html">更新日志</a>。</li></ul></section></div>"""
+GUIDE_BODY = f"""<div class="sd-guide"><div class="sd-guide-intro"><div class="sd-guide-intro__art" aria-hidden="true"><img src="{GUIDE_MASCOT}" alt="" loading="lazy" decoding="async"></div><div class="sd-guide-intro__body"><h2 id="新手上路" tabindex="-1"><a class="header-anchor" href="#新手上路" aria-hidden="true">#</a> 新手上路</h2><ol><li><strong>准备数据</strong>：训练图片 + 同名 <code>.txt</code> 标签；可用「工具与调试 → 数据集打标」。</li><li><strong>选择训练类型</strong>（侧栏「训练」）：<ul><li><a href="/lora/sd3.html"><strong>Anima</strong></a> — Anima DiT（推荐）</li><li><a href="/lora/flux.html"><strong>Flux</strong></a></li><li><a href="/lora/master.html"><strong>Stable Diffusion</strong></a> — 默认 SDXL</li><li><a href="/dreambooth/index.html"><strong>Dreambooth 训练</strong></a></li></ul></li><li><strong>填写参数并开训</strong>：中栏表单 → 右栏「开始训练」。</li><li><strong>查看进度</strong>：<a href="/train-monitor" target="_blank" rel="noopener noreferrer">训练监控</a>、<a href="/tensorboard.html">Tensorboard</a>。</li></ol></div></div><section class="sd-guide-migrate"><h2 id="从秋叶版迁移" tabindex="-1"><a class="header-anchor" href="#从秋叶版迁移" aria-hidden="true">#</a> 从秋叶版迁移</h2><p>若你使用过 <strong>Akegarasu/lora-scripts</strong>（秋叶一键包），本版主要变化：</p><ul><li><strong>品牌</strong>：项目名 <strong>lora-scripts-story-next</strong> / Next Story Trainer，侧栏按「训练 / 工具 / 帮助 / 其他」分组。</li><li><strong>导航</strong>：LoRA 下为 Anima、Flux、Stable Diffusion；原「新手 / 专家」不再平铺（SD1.5 精简页：<a href="/lora/basic.html">/lora/basic.html</a>）。</li><li><strong>Anima</strong>：原 SD3 入口改为 Anima（Qwen + T5 + DiT）。</li><li><strong>监控</strong>：独立 <a href="/train-monitor" target="_blank" rel="noopener noreferrer">训练监控页</a>、Loss 曲线、<code>/train-log</code> 日志流。</li><li>更多版本说明见 <a href="/other/changelog.html">更新日志</a>。</li></ul></section></div>"""
 
 CHANGELOG_BANNER_HTML = (
     f'<div class="sd-changelog-banner"><img src="{CHANGELOG_BANNER}" '
-    f'alt="Next Trainer" loading="lazy" width="960" height="420"></div>'
+    f'alt="Next Story Trainer" loading="lazy" width="960" height="420"></div>'
 )
 
 BRAND_CSS = """
@@ -233,8 +233,8 @@ def patch_home_logo() -> None:
     index_html = DIST / "index.html"
     html = index_html.read_text(encoding="utf-8")
     html = re.sub(
-        r'<img src="/assets/icon\.65fd68ba\.webp[^"]*" width="200" height="200" alt="Next Trainer"[^>]*>',
-        f'<img src="{HOME_LOGO}" class="sd-home-logo" width="300" height="300" alt="Next Trainer" loading="lazy">',
+        r'<img src="/assets/icon\.65fd68ba\.webp[^"]*" width="200" height="200" alt="Next Story Trainer"[^>]*>',
+        f'<img src="{HOME_LOGO}" class="sd-home-logo" width="300" height="300" alt="Next Story Trainer" loading="lazy">',
         html,
         count=1,
     )

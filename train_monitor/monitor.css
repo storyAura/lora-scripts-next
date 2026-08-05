@@ -1,3 +1,11 @@
+
+/* Next Story Trainer monitor brand tokens */
+:root {
+  --nst-monitor-bg: #0F172A;
+  --nst-monitor-panel: #111827;
+  --nst-monitor-accent: #A78BFA;
+  --nst-monitor-chart: #38BDF8;
+}
 :root {
   color-scheme: light;
 

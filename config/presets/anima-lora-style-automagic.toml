@@ -1,7 +1,7 @@
 [metadata]
 name = "Anima LoRA - 画风通用（Automagic）"
 version = "1.0"
-author = "SD-Trainer Next"
+author = "Next Story Trainer"
 train_type = "anima-lora"
 description = "适合画风、上色、光影、构图和质感训练。使用 Automagic，隐藏学习率和调度器细节。"
 

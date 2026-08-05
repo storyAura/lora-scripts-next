@@ -36,12 +36,12 @@
   };
 
   const STATUS_META = {
-    queued: { label: "排队中", cls: "queued" },
-    paused: { label: "已暂停", cls: "paused" },
-    editing: { label: "编辑中", cls: "editing" },
-    running: { label: "训练中", cls: "running" },
-    done: { label: "已完成", cls: "done" },
-    failed: { label: "失败", cls: "failed" },
+    queued: { label: "排队中", labelEn: "Queued", cls: "queued" },
+    paused: { label: "已暂停", labelEn: "Paused", cls: "paused" },
+    editing: { label: "编辑中", labelEn: "Editing", cls: "editing" },
+    running: { label: "训练中", labelEn: "Running", cls: "running" },
+    done: { label: "已完成", labelEn: "Done", cls: "done" },
+    failed: { label: "失败", labelEn: "Failed", cls: "failed" },
   };
 
   const START_LABELS = ["开始训练", "Start training", "加入训练队列", "Add to training queue", "保存修改到队列", "Save to queue"];
@@ -349,26 +349,46 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
   }
 
   function entryOps(entry) {
+    const en = isEnglish();
     const ops = [];
     const op = (act, label, extra) => `<button class="sdq-op ${extra || ""}" data-act="${act}" data-id="${entry.id}">${label}</button>`;
     switch (entry.status) {
       case "queued":
-        ops.push(op("start", "▶ 立即开始"), op("pause", "⏸ 暂停"), op("edit", "✎ 编辑"), op("delete", "删除", "danger"));
+        ops.push(
+          op("start", en ? "▶ Start now" : "▶ 立即开始"),
+          op("pause", en ? "⏸ Pause" : "⏸ 暂停"),
+          op("edit", en ? "✎ Edit" : "✎ 编辑"),
+          op("delete", en ? "Delete" : "删除", "danger")
+        );
         break;
       case "paused":
-        ops.push(op("resume", "▶ 恢复"), op("edit", "✎ 编辑"), op("delete", "删除", "danger"));
+        ops.push(
+          op("resume", en ? "▶ Resume" : "▶ 恢复"),
+          op("edit", en ? "✎ Edit" : "✎ 编辑"),
+          op("delete", en ? "Delete" : "删除", "danger")
+        );
         break;
       case "editing":
-        ops.push(op("cancel-edit", "取消编辑"), op("delete", "删除", "danger"));
+        ops.push(
+          op("cancel-edit", en ? "Cancel edit" : "取消编辑"),
+          op("delete", en ? "Delete" : "删除", "danger")
+        );
         break;
       case "running":
-        ops.push(`<a class="sdq-op" href="/train-log?task_id=${encodeURIComponent(entry.task_id || "")}" target="_blank" rel="noopener">查看日志</a>`);
+        ops.push(`<a class="sdq-op" href="/train-log?task_id=${encodeURIComponent(entry.task_id || "")}" target="_blank" rel="noopener">${en ? "View log" : "查看日志"}</a>`);
         break;
       case "failed":
-        ops.push(op("requeue", "↻ 重新排队"), op("edit", "✎ 编辑"), op("delete", "删除", "danger"));
+        ops.push(
+          op("requeue", en ? "↻ Requeue" : "↻ 重新排队"),
+          op("edit", en ? "✎ Edit" : "✎ 编辑"),
+          op("delete", en ? "Delete" : "删除", "danger")
+        );
         break;
       case "done":
-        ops.push(op("requeue", "↻ 再训一次"), op("delete", "删除", "danger"));
+        ops.push(
+          op("requeue", en ? "↻ Train again" : "↻ 再训一次"),
+          op("delete", en ? "Delete" : "删除", "danger")
+        );
         break;
     }
     return ops.join("");
@@ -401,16 +421,18 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
   }
 
   function entryHtml(entry, idx) {
-    const st = STATUS_META[entry.status] || { label: entry.status, cls: "queued" };
+    const en = isEnglish();
+    const st = STATUS_META[entry.status] || { label: entry.status, labelEn: entry.status, cls: "queued" };
+    const stLabel = en ? (st.labelEn || st.label) : st.label;
     const terminal = entry.status === "done" || entry.status === "failed";
     const draggable = !terminal && entry.status !== "running";
     return `
 <li class="sdq-item${terminal ? " is-terminal" : ""}" data-id="${entry.id}" draggable="${draggable}">
-  ${draggable ? `<span class="sdq-handle" title="拖动调整顺序">⠿</span>` : ""}
+  ${draggable ? `<span class="sdq-handle" title="${en ? "Drag to reorder" : "拖动调整顺序"}">⠿</span>` : ""}
   ${idx != null ? `<span class="sdq-idx">${idx + 1}</span>` : ""}
   <div class="sdq-main">
     <span class="sdq-name">${escapeHtml(entry.name)}</span>
-    <span class="sdq-chips"><span class="sdq-chip st-${st.cls}">${st.label}</span></span>
+    <span class="sdq-chips"><span class="sdq-chip st-${st.cls}">${stLabel}</span></span>
     <div class="sdq-meta">${entryMeta(entry)}</div>
     ${entry.error ? `<div class="sdq-error">${escapeHtml(entry.error)}</div>` : ""}
   </div>
@@ -421,16 +443,25 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
   function renderOverlay() {
     const overlay = document.getElementById(OVERLAY_ID);
     if (!overlay || !state || dragging) return;
+    const en = isEnglish();
 
     const s = state;
     let stateText;
     if (s.active) {
-      stateText = "队列进行中：任务完成后自动开始下一个";
+      stateText = en
+        ? "Queue running: next job starts automatically when the current one finishes"
+        : "队列进行中：任务完成后自动开始下一个";
     } else if (s.user_paused) {
-      stateText = s.halt_reason || "队列已暂停：新任务只入队不开始";
+      stateText = s.halt_reason || (en
+        ? "Queue paused: new jobs enqueue but do not start"
+        : "队列已暂停：新任务只入队不开始");
     } else {
-      stateText = "队列空闲：提交训练任务后自动按序开始";
+      stateText = en
+        ? "Queue idle: submitted jobs start automatically in order"
+        : "队列空闲：提交训练任务后自动按序开始";
     }
+    overlay.querySelector(".sdq-title").textContent = en ? "Training Queue" : "训练队列";
+    overlay.querySelector(".sdq-close").textContent = en ? "✕ Close" : "✕ 关闭";
     overlay.querySelector(".sdq-state").className = "sdq-state" + (s.active ? " on" : "");
     overlay.querySelector(".sdq-state-text").textContent = stateText;
 
@@ -442,20 +473,27 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     const anyPaused = pending.some((e) => e.status === "paused");
     toolbar.innerHTML = `
       ${s.active
-        ? `<button class="sdq-btn" data-act="queue-stop">⏸ 暂停队列</button>`
-        : `<button class="sdq-btn primary" data-act="queue-start">▶ 开始队列</button>`}
-      ${anyPaused ? `<button class="sdq-btn" data-act="queue-start-all">▶ 恢复全部并开始</button>` : ""}
+        ? `<button class="sdq-btn" data-act="queue-stop">${en ? "⏸ Pause queue" : "⏸ 暂停队列"}</button>`
+        : `<button class="sdq-btn primary" data-act="queue-start">${en ? "▶ Start queue" : "▶ 开始队列"}</button>`}
+      ${anyPaused ? `<button class="sdq-btn" data-act="queue-start-all">${en ? "▶ Resume all & start" : "▶ 恢复全部并开始"}</button>` : ""}
     `;
 
     const speed = s.last_speed;
     overlay.querySelector(".sdq-speed").innerHTML = speed
-      ? `速度参考：<b>${speed.it_s} it/s</b>（来自上一任务「${escapeHtml(speed.name)}」${speed.lora_type ? "，" + escapeHtml(speed.lora_type) : ""}）。` +
-        `<br>注意：LoRA / LoKr 等不同算法、不同分辨率与参数下速度差异明显，预计时长<b>仅供参考</b>。`
-      : "暂无速度参考：完成一次训练后会自动记录上一任务的 it/s，用于折算预计时长（LoRA / LoKr 等算法速度不同，仅供参考）。";
+      ? (en
+        ? `Speed reference: <b>${speed.it_s} it/s</b> (from last job “${escapeHtml(speed.name)}”${speed.lora_type ? ", " + escapeHtml(speed.lora_type) : ""}).` +
+          `<br>Note: LoRA / LoKr and different resolutions differ a lot — ETA is <b>approximate only</b>.`
+        : `速度参考：<b>${speed.it_s} it/s</b>（来自上一任务「${escapeHtml(speed.name)}」${speed.lora_type ? "，" + escapeHtml(speed.lora_type) : ""}）。` +
+          `<br>注意：LoRA / LoKr 等不同算法、不同分辨率与参数下速度差异明显，预计时长<b>仅供参考</b>。`)
+      : (en
+        ? "No speed reference yet: after one finished run, the last it/s is used to estimate ETA (approximate only)."
+        : "暂无速度参考：完成一次训练后会自动记录上一任务的 it/s，用于折算预计时长（LoRA / LoKr 等算法速度不同，仅供参考）。");
 
     const list = overlay.querySelector(".sdq-list");
     if (!pending.length) {
-      list.innerHTML = `<li class="sdq-empty">队列是空的喵。<br>在训练页配置好参数后点「开始训练」即可入队并自动开始；<br>连续多次提交就会自动排成队，按顺序训练。</li>`;
+      list.innerHTML = en
+        ? `<li class="sdq-empty">Queue is empty.<br>Configure a training page and click “Start training” to enqueue;<br>multiple submits form a queue and run in order.</li>`
+        : `<li class="sdq-empty">队列是空的喵。<br>在训练页配置好参数后点「开始训练」即可入队并自动开始；<br>连续多次提交就会自动排成队，按顺序训练。</li>`;
     } else {
       list.innerHTML = pending.map((entry, idx) => entryHtml(entry, idx)).join("");
     }
@@ -466,10 +504,25 @@ html.dark #${OVERLAY_ID} .sdq-hints { color: #847964; }
     } else {
       historyBox.innerHTML = `
 <div class="sdq-history-head">
-  <span>历史记录（${history.length}）</span>
-  <button class="sdq-op" data-act="clear-finished">归档清除全部历史</button>
+  <span>${en ? `History (${history.length})` : `历史记录（${history.length}）`}</span>
+  <button class="sdq-op" data-act="clear-finished">${en ? "Clear all history" : "归档清除全部历史"}</button>
 </div>
 <ul class="sdq-list">${history.map((entry) => entryHtml(entry, null)).join("")}</ul>`;
+    }
+
+    const hints = overlay.querySelector(".sdq-hints");
+    if (hints) {
+      hints.innerHTML = en
+        ? `· Every train submit goes through the queue: idle submits start immediately; busy submits wait, then auto-continue.<br>
+· ETA ≈ estimated steps ÷ last measured it/s. LoRA vs LoKr differ — approximate only.<br>
+· Edit loads that job into the matching training form (unsaved form data is overwritten). Editing pauses the queue; Save to queue / cancel edit resumes unless you had paused manually.<br>
+· Finished/failed jobs stay in history until deleted or cleared.<br>
+· To stop the running job: pause the queue first, then terminate from the log page.`
+        : `· 所有训练任务都经由队列：空闲时提交会立即自动开始，忙碌时自动排队，完成后自动接跑下一个。<br>
+· 预计时长 = 预计步数 ÷ 上一任务实测 it/s。LoRA 与 LoKr 等算法速度差异明显，仅供参考。<br>
+· 「编辑」会把该任务参数载入对应训练页表单（当前表单未保存内容会被覆盖）；编辑期间队列暂停，点「保存修改到队列」或取消编辑后自动继续（若编辑前手动暂停过队列，则保持暂停）。<br>
+· 完成/失败的任务会留在历史记录里（含完成时间与耗时），可单个删除、整体归档清除，或放着不管。<br>
+· 想停下正在训练的任务：先「暂停队列」再到日志页终止，避免队列自动接跑下一个。正在训练的任务无法在此暂停或删除。`;
     }
   }
 

@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 # Bump this whenever frontend/dist assets are patched in place (same filename hash).
-SPA_ASSET_CACHE_KEY = "20260804-v2.9.2-changelog"
+SPA_ASSET_CACHE_KEY = "20260805-v2.9.3-lora-intro"
 
 # Previous keys replaced by scripts/bump_spa_asset_cache_key.py when bumping.
 LEGACY_SPA_ASSET_CACHE_KEYS = (
+    "20260805-v2.9.3-schema-md",
+    "20260805-v2.9.3-hmen-fix",
+    "20260805-v2.9.3-home-en2",
+    "20260805-v2.9.3-home-en",
+    "20260805-v2.9.3-chg-hydrate",
+    "20260805-v2.9.3-changelog-fix",
+    "20260805-v2.9.3-sidebar-github",
+    "20260805-v2.9.3-i18n-brandfix",
+    "20260805-v2.9.3-i18n-contact",
+    "20260805-v2.9.3-nst-brand",
+    "20260805-v2.9.3-changelog",
+    "20260804-v2.9.2-changelog",
     "20260605-routefix2",
     "20260627-config-import",
     "20260723-v2.9.0-lokr-preview",

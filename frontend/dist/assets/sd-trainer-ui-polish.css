@@ -1,4 +1,18 @@
 
+/* ----- Next Story Trainer brand tokens ----- */
+:root {
+  --nst-brand-primary: #8B5CF6;
+  --nst-brand-secondary: #EC4899;
+  --nst-brand-warm-bg: #FFF7ED;
+  --nst-surface: #FFFFFF;
+  --nst-text: #1F2937;
+  --nst-muted: #6B7280;
+  --nst-border-soft: rgba(139, 92, 246, 0.18);
+  --nst-focus-ring: rgba(139, 92, 246, 0.32);
+  --nst-radius-card: 18px;
+  --nst-shadow-card: 0 12px 30px rgba(31, 41, 55, 0.08);
+}
+
 /* ========== SD-Trainer UI polish (2026-05-21) ========== */
 /* 秋叶原版色系：白/浅灰两层 + 圆角与按钮层次打磨 */
 /* See frontend/DESIGN-training-params-ui.md */
