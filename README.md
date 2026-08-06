@@ -26,14 +26,10 @@
 
 ---
 
-<p align="center"><sub>Demo screenshots (train-monitor style) will be added later.</sub></p>
-
----
-
 ## Get Started in 3 Steps
 
 ```
-1. Download  →  SD-Trainer-v2.8.2.7z from [Releases](https://github.com/wochenlong/lora-scripts-next/releases), extract
+1. Download  →  SD-Trainer-v2.8.2.7z from [Releases](https://github.com/storyAura/lora-scripts-story-next/releases), extract
 2. Launch    →  Double-click run_gui.bat (auto-installs deps on first run, ~3 GB)
 3. Train     →  Open http://127.0.0.1:28000, pick a model, set params, start training
 ```
@@ -81,22 +77,28 @@ Python **3.10** recommended. See [Flash Attention 2 docs](docs/flash-attention.m
 | Flux | LoRA | xformers / SDPA |
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-lora.png?v=20260805-nst" alt="Anima LoRA training UI" width="920" />
+  <img src="assets/readme/screenshot-anima-lora.png?v=20260806-nst" alt="Anima LoRA training UI" width="920" />
 </p>
 
-<p align="center"><sub>Anima LoRA — sidebar, model &amp; dataset form, config preview on the right</sub></p>
+<p align="center"><sub>Anima LoRA (Expert mode) — sidebar, model &amp; dataset form, config preview on the right</sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-fast.png?v=20260805-nst" alt="Anima LoRA Fast mode UI" width="920" />
+  <img src="assets/readme/screenshot-anima-fast.png?v=20260806-nst" alt="Anima LoRA Fast mode UI" width="920" />
 </p>
 
-<p align="center"><sub>Anima LoRA Fast — optional plugin path under <b>标准模式 / Fast 模式</b>; install the runtime with <code>scripts/cli/install_anima_fast.*</code> (recommended — full terminal output) or the in-page button. See <a href="docs/anima-fast.md">docs/anima-fast.md</a></sub></p>
+<p align="center"><sub>Anima LoRA Fast — optional <code>sorryhyun/anima_lora</code> plugin path; install via in-page button or <code>scripts/cli/install_anima_fast.*</code>. See <a href="docs/anima-fast.md">docs/anima-fast.md</a></sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-finetune.png?v=20260805-nst" alt="Anima full finetune UI" width="920" />
+  <img src="assets/readme/screenshot-train-queue.png?v=20260806-nst" alt="Training queue UI" width="920" />
 </p>
 
-<p align="center"><sub>Anima Finetune — full DiT weights under <b>Full Finetune</b> in the sidebar</sub></p>
+<p align="center"><sub>Training Queue — submit multiple jobs, auto-run conveyor, history with retry / edit / delete</sub></p>
+
+<p align="center">
+  <img src="assets/readme/screenshot-train-params.png?v=20260806-nst" alt="Training parameter guide" width="920" />
+</p>
+
+<p align="center"><sub>Help → Training Parameters — beginner quick-reference for the knobs that actually matter</sub></p>
 
 ---
 
@@ -111,22 +113,10 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 **v2.9.3:** GSoKR BF16 merge path fixed; Next Story Trainer brand assets landed; English UI dictionaries (Chrome / Schema / Help) with whole-block Markdown description translation; contact + GitHub point to storyAura; LoRA training intro synced.
 
 <p align="center">
-  <img src="assets/readme/screenshot-train-monitor.png" alt="Train Monitor Dashboard" width="920" />
+  <img src="assets/readme/screenshot-train-monitor.png?v=20260806-nst" alt="Train Monitor Dashboard" width="920" />
 </p>
 
-<p align="center"><sub>GPU load & VRAM, total steps, training params at a glance</sub></p>
-
-<p align="center">
-  <img src="assets/readme/train-monitor-samples.png" alt="Preview Samples & Loss Curves" width="920" />
-</p>
-
-<p align="center"><sub>Preview samples and TensorBoard-backed Loss / LR curves</sub></p>
-
-<p align="center">
-  <img src="assets/readme/train-monitor-logs.png" alt="Training Logs" width="920" />
-</p>
-
-<p align="center"><sub>Real-time training logs with auto-scroll</sub></p>
+<p align="center"><sub>Train Monitor — status, params, and preview samples in one dashboard</sub></p>
 
 ---
 
@@ -203,4 +193,4 @@ Full details in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-<p align="center"><sub>Maintainer: <b><a href="https://github.com/wochenlong">@wochenlong</a></b> · <a href="CONTRIBUTORS.md">Contributors</a></sub></p>
+<p align="center"><sub>Maintainer: <b><a href="https://github.com/storyAura">@storyAura</a></b> · <a href="CONTRIBUTORS.md">Contributors</a></sub></p>

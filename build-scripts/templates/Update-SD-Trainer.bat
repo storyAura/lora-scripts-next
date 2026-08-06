@@ -99,7 +99,7 @@ echo.
 :: --------------- Detect origin URL ---------------
 set "ORIGIN_URL="
 for /f "tokens=*" %%u in ('git remote get-url origin 2^>nul') do set "ORIGIN_URL=%%u"
-if not defined ORIGIN_URL set "ORIGIN_URL=https://github.com/wochenlong/lora-scripts-next.git"
+if not defined ORIGIN_URL set "ORIGIN_URL=https://github.com/storyAura/lora-scripts-story-next.git"
 
 :: --------------- Fetch with mirror fallback ---------------
 echo Fetching latest code / 获取最新代码...
@@ -156,7 +156,7 @@ if %FETCH_OK% equ 0 (
     echo  3. Try Update-SD-Trainer-Release.bat / 尝试 Release 原地更新:
     echo     %PORTABLE_ROOT%Update-SD-Trainer-Release.bat
     echo  4. Or download latest Release manually / 或手动下载最新整合包:
-    echo     https://github.com/wochenlong/lora-scripts-next/releases
+    echo     https://github.com/storyAura/lora-scripts-story-next/releases
     echo  5. Keep your data: sd-models\, output\, logs\, extensions\
     echo     保留你的数据后替换或合并整合包
     echo.
@@ -326,10 +326,10 @@ where curl >nul 2>&1
 if errorlevel 1 goto :eof
 if not exist "%PROJECT_DIR%\scripts\portable\" mkdir "%PROJECT_DIR%\scripts\portable\"
 echo Bootstrapping updater scripts / 正在拉取更新脚本引导文件...
-curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
-if errorlevel 1 curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
-curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
-if errorlevel 1 curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
+curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
+if errorlevel 1 curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
+curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
+if errorlevel 1 curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
 goto :eof
 
 :: =============== Subroutine: bootstrap_updater_scripts ===============

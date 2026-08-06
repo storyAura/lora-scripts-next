@@ -1,5 +1,5 @@
 ﻿# Shared helpers for portable Git / Release updaters.
-$script:PortableUpdaterRepo = "wochenlong/lora-scripts-next"
+$script:PortableUpdaterRepo = "storyAura/lora-scripts-story-next"
 $script:PortableUpdaterBranch = "main"
 
 function Initialize-PortableUpdaterConsole {

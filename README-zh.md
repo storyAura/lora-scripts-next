@@ -26,14 +26,10 @@
 
 ---
 
-<p align="center"><sub>演示截图（训练监控风格）稍后补齐。</sub></p>
-
----
-
 ## 三步开始训练
 
 ```
-1. 下载  →  从 [Releases](https://github.com/wochenlong/lora-scripts-next/releases) 下载 **SD-Trainer-v2.8.2.7z**，解压
+1. 下载  →  从 [Releases](https://github.com/storyAura/lora-scripts-story-next/releases) 下载 **SD-Trainer-v2.8.2.7z**，解压
 2. 启动  →  双击 run_gui.bat（首次自动安装依赖 ~3 GB）
 3. 训练  →  浏览器打开 http://127.0.0.1:28000，选模型、填参数、开练
 ```
@@ -81,22 +77,28 @@ bash install_flash_attn.sh
 | Flux | LoRA | xformers / SDPA |
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-lora.png?v=20260805-nst" alt="Anima LoRA 训练界面" width="920" />
+  <img src="assets/readme/screenshot-anima-lora.png?v=20260806-nst" alt="Anima LoRA 训练界面" width="920" />
 </p>
 
-<p align="center"><sub>Anima LoRA — 侧栏导航、中栏模型与数据集表单、右栏配置预览</sub></p>
+<p align="center"><sub>Anima LoRA（专家模式）— 侧栏导航、中栏模型与数据集表单、右栏配置预览</sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-fast.png?v=20260805-nst" alt="Anima LoRA Fast 模式界面" width="920" />
+  <img src="assets/readme/screenshot-anima-fast.png?v=20260806-nst" alt="Anima LoRA Fast 模式界面" width="920" />
 </p>
 
-<p align="center"><sub>Anima LoRA Fast — 侧栏「标准模式 / Fast 模式」；推荐用 <code>scripts/cli/install_anima_fast.*</code> 命令行脚本安装（终端可见报错），也可用页内按钮。见 <a href="docs/anima-fast.md">docs/anima-fast.md</a></sub></p>
+<p align="center"><sub>Anima LoRA Fast — 可选 <code>sorryhyun/anima_lora</code> 插件路径；可用页内按钮或 <code>scripts/cli/install_anima_fast.*</code> 安装。见 <a href="docs/anima-fast.md">docs/anima-fast.md</a></sub></p>
 
 <p align="center">
-  <img src="assets/readme/screenshot-anima-finetune.png?v=20260805-nst" alt="Anima 全量微调界面" width="920" />
+  <img src="assets/readme/screenshot-train-queue.png?v=20260806-nst" alt="训练队列界面" width="920" />
 </p>
 
-<p align="center"><sub>Anima 全量微调 — 侧栏「全量微调 → Anima Finetune」，更新完整 DiT 权重</sub></p>
+<p align="center"><sub>训练队列 — 多任务提交、自动传送带、历史记录（再训 / 编辑 / 删除）</sub></p>
+
+<p align="center">
+  <img src="assets/readme/screenshot-train-params.png?v=20260806-nst" alt="训练参数说明" width="920" />
+</p>
+
+<p align="center"><sub>帮助 → 训练参数说明 — 新手速查真正需要动的参数</sub></p>
 
 ---
 
@@ -111,22 +113,10 @@ bash install_flash_attn.sh
 **v2.9.3**：GSoKR BF16 合并路径修正；落地 Next Story Trainer 品牌素材；英文界面词表（Chrome / Schema / Help）与 Markdown 说明整块翻译；联系方式与 Github 指向 storyAura；LoRA 训练页介绍对齐。
 
 <p align="center">
-  <img src="assets/readme/screenshot-train-monitor.png" alt="训练监控仪表盘" width="920" />
+  <img src="assets/readme/screenshot-train-monitor.png?v=20260806-nst" alt="训练监控仪表盘" width="920" />
 </p>
 
-<p align="center"><sub>GPU 负载 & 显存、总步数、训练参数一目了然</sub></p>
-
-<p align="center">
-  <img src="assets/readme/train-monitor-samples.png" alt="预览图与 Loss 曲线" width="920" />
-</p>
-
-<p align="center"><sub>训练预览图 + TensorBoard 同源 Loss / LR 曲线</sub></p>
-
-<p align="center">
-  <img src="assets/readme/train-monitor-logs.png" alt="训练日志" width="920" />
-</p>
-
-<p align="center"><sub>实时训练日志，自动滚动</sub></p>
+<p align="center"><sub>训练监控 — 状态、参数与预览图一站式查看</sub></p>
 
 ---
 
@@ -212,7 +202,7 @@ powershell -ExecutionPolicy Bypass -File .\run_gui_source.ps1
 **源码安装**（`run_gui.bat` 首次自动装依赖、或手动 `install-cn.ps1`）常见原因：
 
 1. **Python 版本不对** — 需要 **3.10 或 3.11、64 位**。3.12/3.13 没有对应 CUDA 预编译包，pip 会报「找不到匹配版本」。
-2. **仓库太旧** — 若脚本里仍是 `torch 2.0.x + cu118`，请 `git pull` 到最新，或改用 [Releases](https://github.com/wochenlong/lora-scripts-next/releases) 整合包。
+2. **仓库太旧** — 若脚本里仍是 `torch 2.0.x + cu118`，请 `git pull` 到最新，或改用 [Releases](https://github.com/storyAura/lora-scripts-story-next/releases) 整合包。
 3. **半装坏的 venv** — 删掉项目下的 `venv` 文件夹后重装。
 
 **不想折腾环境**：直接下载最新 **SD-Trainer-v2.8.2.7z** 整合包（或 Releases 页当前最新版），解压双击 `run_gui.bat`（内置 Python，无需自装 torch）。
@@ -294,4 +284,4 @@ powershell -ExecutionPolicy Bypass -File .\install-cn.ps1
 
 ---
 
-<p align="center"><sub>维护者：<b><a href="https://github.com/wochenlong">@wochenlong</a></b> · <a href="CONTRIBUTORS.md">贡献者</a></sub></p>
+<p align="center"><sub>维护者：<b><a href="https://github.com/storyAura">@storyAura</a></b> · <a href="CONTRIBUTORS.md">贡献者</a></sub></p>

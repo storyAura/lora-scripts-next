@@ -10,7 +10,7 @@ from typing import Optional
 
 from mikazuki.log import log
 
-GITHUB_REPO = "wochenlong/lora-scripts-next"
+GITHUB_REPO = "storyAura/lora-scripts-story-next"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 CHECK_INTERVAL_SECONDS = 6 * 3600  # at most once every 6 hours
 

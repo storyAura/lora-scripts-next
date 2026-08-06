@@ -88,7 +88,7 @@ if not "%RC%"=="0" (
     echo.
     echo [Error] Release update failed / Release 更新失败
     echo You can still use Update-SD-Trainer.bat ^(git^) or download 7z manually:
-    echo https://github.com/wochenlong/lora-scripts-next/releases
+    echo https://github.com/storyAura/lora-scripts-story-next/releases
     pause
     exit /b %RC%
 )
@@ -106,10 +106,10 @@ where curl >nul 2>&1
 if errorlevel 1 goto :eof
 if not exist "%PROJECT_DIR%\scripts\portable\" mkdir "%PROJECT_DIR%\scripts\portable\"
 echo Bootstrapping updater scripts / 正在拉取更新脚本引导文件...
-curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
-if errorlevel 1 curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
-curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
-if errorlevel 1 curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/wochenlong/lora-scripts-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
+curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
+if errorlevel 1 curl -fsSL --retry 2 -o "%COMMON_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/portable_updater_common.ps1" >nul 2>&1
+curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
+if errorlevel 1 curl -fsSL --retry 2 -o "%BOOTSTRAP_PS1%" "https://ghfast.top/https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/main/scripts/portable/bootstrap_portable_updaters.ps1" >nul 2>&1
 goto :eof
 
 :: =============== Subroutine: bootstrap_updater_scripts ===============

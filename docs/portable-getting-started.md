@@ -2,7 +2,7 @@
 
 面向 **SD-Trainer 便携整合包**（`SD-Trainer-v2.x.7z`）用户的进阶说明。快速上手只需 README 中的三步：下载 → 双击 `run_gui.bat` → 浏览器开练。
 
-当前最新版：**v2.8.2**（[Releases](https://github.com/wochenlong/lora-scripts-next/releases/tag/v2.8.2)）。
+当前最新版：**v2.8.2**（[Releases](https://github.com/storyAura/lora-scripts-story-next/releases)）。
 
 ---
 

@@ -45,7 +45,7 @@ sd-* CSS class
 | README clone 地址 | 改为 `https://github.com/storyAura/lora-scripts-story-next.git` |
 | 首页徽章 / GitHub badge | 改为 `storyAura/lora-scripts-story-next` |
 | 上游致谢 | 保留 `wochenlong/lora-scripts-next` 与 `Akegarasu/lora-scripts` |
-| Releases / 便携包下载源 | 默认保持 `wochenlong/lora-scripts-next`，除非发布渠道已正式迁移 |
+| Releases / 便携包下载源 | 已迁移至 `storyAura/lora-scripts-story-next`（徽章 / update_check / portable updater） |
 | 历史 Issue / 历史 changelog | 不强行改写 |
 
 ## 素材源目录

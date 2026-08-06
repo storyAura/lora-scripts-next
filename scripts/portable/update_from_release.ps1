@@ -106,7 +106,7 @@ if (-not (Test-Path (Join-Path $TrainerDir "gui.py"))) {
     throw "SD-Trainer not found under: $PortableRoot"
 }
 
-$repo = "wochenlong/lora-scripts-next"
+$repo = "storyAura/lora-scripts-story-next"
 $asset = Get-ReleaseAsset -Repository $repo -TagName $Tag -PreferredAssetName $AssetName
 $currentVersion = Read-LocalProductVersion $TrainerDir
 $currentBuild = Read-PortableBuild $TrainerDir

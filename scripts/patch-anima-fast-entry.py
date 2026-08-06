@@ -60,7 +60,7 @@ FAST_GUIDE_LINK_HTML = (
     "</p>"
 )
 
-FAST_DOC_URL = "https://github.com/wochenlong/lora-scripts-next/blob/main/docs/anima-fast.md"
+FAST_DOC_URL = "https://github.com/storyAura/lora-scripts-story-next/blob/main/docs/anima-fast.md"
 
 FAST_DOC_LINKS_HTML = (
     '<p class="anima-fast-doc-links">'

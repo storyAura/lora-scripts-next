@@ -7,8 +7,8 @@
 | Token | Value | 用途 |
 |---|---|---|
 | `brand.name` | `Next Story Trainer` | 产品正式展示名 |
-| `brand.repo` | `storyAura/lora-scripts-story-next` | GitHub 展示、clone 地址、README 主仓库 |
-| `brand.upstream.parent` | `wochenlong/lora-scripts-next` | 上游 fork 来源、Releases 渠道说明 |
+| `brand.repo` | `storyAura/lora-scripts-story-next` | GitHub 展示、clone 地址、README 主仓库、Releases / 更新检查渠道 |
+| `brand.upstream.parent` | `wochenlong/lora-scripts-next` | 上游 fork 来源、历史 Issue / 致谢说明 |
 | `brand.upstream.source` | `Akegarasu/lora-scripts` | 原始项目致谢 |
 | `brand.technical.sdTrainer` | `SD-Trainer` | 便携包目录、兼容路径，不作为新品牌展示名 |
 | `brand.trainType.sd3` | `sd3-lora` | 训练类型契约，不改名 |

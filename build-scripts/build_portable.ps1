@@ -98,7 +98,7 @@ function Clone-SDTrainerGitMetadata {
     $branch = (& git -C $ProjectRoot branch --show-current 2>$null | Select-Object -First 1)
     if (-not $branch) { $branch = "main" }
     $remote = (& git -C $ProjectRoot remote get-url origin 2>$null | Select-Object -First 1)
-    if (-not $remote) { $remote = "https://github.com/wochenlong/lora-scripts-next.git" }
+    if (-not $remote) { $remote = "https://github.com/storyAura/lora-scripts-story-next.git" }
 
     & git clone --depth=1 --single-branch --branch $branch $remote $tempGitCloneDir
     if ($LASTEXITCODE -ne 0) {

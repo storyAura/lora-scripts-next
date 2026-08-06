@@ -303,9 +303,11 @@ Exceptions and traps (2026-08-01):
 
 - Remote: `origin` = `storyAura/lora-scripts-story-next` (this fork; commit to `main`, no PRs).
   **Never `git push` unless the user explicitly asks** (用户裁定 2026-08-01) — finish with a
-  local commit and report "已提交未推送". Links to `wochenlong/lora-scripts-next` — issues, releases, `GITHUB_REPO`
-  in `mikazuki/update_check.py`, portable updater URLs — point at the **upstream** on purpose:
-  that is where the referenced issues and release packages live. Do not "fix" them.
+  local commit and report "已提交未推送". Product Releases / `GITHUB_REPO` in
+  `mikazuki/update_check.py` / portable updater URLs point at
+  `storyAura/lora-scripts-story-next`. Historical Issue / Discussion / PR links and
+  upstream acknowledgments still point at `wochenlong/lora-scripts-next` on purpose —
+  do not "fix" those.
 - Cutting a version touches four places in one commit: `VERSION` (feeds the sidebar chip via
   `/api/version`), `CHANGELOG.md`, the changelog tables in **both** `README.md` and
   `README-zh.md` (bilingual pair — always edit both), and the WebUI 「其他 → 更新日志」 page.

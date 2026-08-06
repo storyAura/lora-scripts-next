@@ -48,6 +48,33 @@ class ContactAndI18nStaticTests(unittest.TestCase):
         self.assertNotIn(old, bottom)
         self.assertIn(f'createTextVNode(" Github "),createBaseVNode("a",{{class:"icon",href:"{new}"', layout)
 
+    def test_home_and_changelog_badges_use_storyaura_release_channel(self):
+        new = "storyAura/lora-scripts-story-next"
+        old_release = "wochenlong/lora-scripts-next/releases"
+        old_shield = "v/release/wochenlong/lora-scripts-next"
+        files = [
+            ROOT / "frontend" / "dist" / "index.html",
+            ROOT / "frontend" / "dist" / "assets" / "index.html.c6ef684b.js",
+            ROOT / "frontend" / "dist" / "other" / "changelog.html",
+            ROOT / "frontend" / "dist" / "assets" / "changelog.html.e5f6a7b8.js",
+        ]
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn(old_release, text, path.name)
+            self.assertNotIn(old_shield, text, path.name)
+            self.assertIn(f"github/v/release/{new}", text, path.name)
+            self.assertIn(f"https://github.com/{new}/releases", text, path.name)
+        changelog = (ROOT / "frontend" / "dist" / "other" / "changelog.html").read_text(
+            encoding="utf-8"
+        )
+        for kind in ("stars", "forks", "license"):
+            self.assertIn(f"github/{kind}/{new}", changelog)
+        # Historical issue links remain on upstream.
+        self.assertIn(
+            "https://github.com/wochenlong/lora-scripts-next/issues/54",
+            changelog,
+        )
+
     def test_next_page_mapping_does_not_collide_with_brand_name(self):
         nav = NAV_I18N.read_text(encoding="utf-8")
         chrome = json.loads(CHROME_DICT.read_text(encoding="utf-8"))
