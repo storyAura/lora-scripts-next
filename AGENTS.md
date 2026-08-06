@@ -309,8 +309,9 @@ Exceptions and traps (2026-08-01):
   upstream acknowledgments still point at `wochenlong/lora-scripts-next` on purpose —
   do not "fix" those.
 - Cutting a version touches four places in one commit: `VERSION` (feeds the sidebar chip via
-  `/api/version`), `CHANGELOG.md`, the changelog tables in **both** `README.md` and
-  `README-zh.md` (bilingual pair — always edit both), and the WebUI 「其他 → 更新日志」 page.
+  `/api/version`), `CHANGELOG.md`, the changelog tables in **both** `README.md` (Chinese
+  default) and `README.en.md` (bilingual pair — always edit both; `README-zh.md` is a
+  redirect stub), and the WebUI 「其他 → 更新日志」 page.
   That page is SSR + hydration: insert *identical* HTML into
   `frontend/dist/other/changelog.html` **and** the template string in
   `frontend/dist/assets/changelog.html.e5f6a7b8.js`, then bump the SPA cache key. Never rerun

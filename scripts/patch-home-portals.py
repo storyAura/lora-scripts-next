@@ -32,7 +32,7 @@ MONITOR_DESC = "自动端口 · 实时日志"
 
 BADGES = """<p class="sd-home-badges" align="center"><a href="https://github.com/storyAura/lora-scripts-story-next" style="margin:2px;"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/storyAura/lora-scripts-story-next"></a><a href="https://github.com/storyAura/lora-scripts-story-next" style="margin:2px;"><img alt="GitHub forks" src="https://img.shields.io/github/forks/storyAura/lora-scripts-story-next"></a><a href="https://raw.githubusercontent.com/storyAura/lora-scripts-story-next/master/LICENSE" style="margin:2px;"><img src="https://img.shields.io/github/license/storyAura/lora-scripts-story-next" alt="license"></a><a href="https://github.com/storyAura/lora-scripts-story-next/releases" style="margin:2px;"><img src="https://img.shields.io/github/v/release/storyAura/lora-scripts-story-next?color=blueviolet&amp;include_prereleases" alt="release"></a></p>"""
 
-HOME_HUB_HTML = f"""<div class="sd-home-hub">{BADGES}<p class="sd-home-lead"><strong>lora-scripts-next</strong>（Next Story Trainer）是基于秋叶 <a href="https://github.com/Akegarasu/lora-scripts" target="_blank" rel="noopener noreferrer">lora-scripts</a> 的<strong>下一代</strong> Stable Diffusion 训练 WebUI：在浏览器里配参数、一键开训。</p><h2 class="sd-home-section-title">LoRA 训练</h2><div class="sd-home-portals"><a class="sd-home-portal sd-home-portal--primary" href="/lora/sd3.html"><span class="sd-home-portal__title">Anima LoRA</span><span class="sd-home-portal__desc">DiT · 主推</span></a><a class="sd-home-portal" href="/lora/anima-fast.html"><span class="sd-home-portal__title">Anima Fast</span><span class="sd-home-portal__desc">插件加速 · 进阶</span></a><a class="sd-home-portal" href="/lora/flux.html"><span class="sd-home-portal__title">Flux</span><span class="sd-home-portal__desc">Flux LoRA</span></a><a class="sd-home-portal" href="/lora/master.html"><span class="sd-home-portal__title">Stable Diffusion</span><span class="sd-home-portal__desc">SD1.5 / SDXL LoRA</span></a></div><h2 class="sd-home-section-title">全量微调</h2><div class="sd-home-portals"><a class="sd-home-portal" href="/lora/anima-finetune.html"><span class="sd-home-portal__title">Anima Finetune</span><span class="sd-home-portal__desc">DiT full finetune · 高显存</span></a><a class="sd-home-portal" href="/dreambooth/index.html"><span class="sd-home-portal__title">Stable Diffusion</span><span class="sd-home-portal__desc">SDXL Finetune · Dreambooth</span></a></div><h2 class="sd-home-section-title">训练监控</h2><div class="sd-home-portals sd-home-portals--single"><a class="sd-home-portal sd-home-portal--monitor" href="{MONITOR_URL}" target="_blank" rel="noopener noreferrer"><span class="sd-home-portal__title">训练监控</span><span class="sd-home-portal__desc">{MONITOR_DESC}</span></a></div><p class="sd-home-foot">详细步骤见 <a href="/help/guide.html">帮助 → 新手上路</a>；秋叶用户迁移说明也在该页。参数释义 · <a href="/lora/params.html">训练参数说明</a> · <a href="/other/changelog.html">更新日志</a></p></div>"""
+HOME_HUB_HTML = f"""<div class="sd-home-hub">{BADGES}<p class="sd-home-lead"><strong>lora-scripts-story-next</strong>（Next Story Trainer）是基于秋叶 <a href="https://github.com/Akegarasu/lora-scripts" target="_blank" rel="noopener noreferrer">lora-scripts</a> 的下一代训练 WebUI：主打 Anima DiT 训练与训练队列，在浏览器里配参数、一键开训。上游归属见「其他 → 关于」与 NOTICE。</p><h2 class="sd-home-section-title">LoRA 训练</h2><div class="sd-home-portals"><a class="sd-home-portal sd-home-portal--primary" href="/lora/sd3.html"><span class="sd-home-portal__title">Anima LoRA</span><span class="sd-home-portal__desc">DiT · 主推</span></a><a class="sd-home-portal" href="/lora/anima-fast.html"><span class="sd-home-portal__title">Anima Fast</span><span class="sd-home-portal__desc">插件加速 · 进阶</span></a><a class="sd-home-portal" href="/lora/flux.html"><span class="sd-home-portal__title">Flux</span><span class="sd-home-portal__desc">Flux LoRA</span></a><a class="sd-home-portal" href="/lora/master.html"><span class="sd-home-portal__title">Stable Diffusion</span><span class="sd-home-portal__desc">SD1.5 / SDXL LoRA</span></a></div><h2 class="sd-home-section-title">全量微调</h2><div class="sd-home-portals"><a class="sd-home-portal" href="/lora/anima-finetune.html"><span class="sd-home-portal__title">Anima Finetune</span><span class="sd-home-portal__desc">DiT full finetune · 高显存</span></a><a class="sd-home-portal" href="/dreambooth/index.html"><span class="sd-home-portal__title">Stable Diffusion</span><span class="sd-home-portal__desc">SDXL Finetune · Dreambooth</span></a></div><h2 class="sd-home-section-title">训练监控</h2><div class="sd-home-portals sd-home-portals--single"><a class="sd-home-portal sd-home-portal--monitor" href="{MONITOR_URL}" target="_blank" rel="noopener noreferrer"><span class="sd-home-portal__title">训练监控</span><span class="sd-home-portal__desc">{MONITOR_DESC}</span></a></div><p class="sd-home-foot">详细步骤见 <a href="/help/guide.html">帮助 → 新手上路</a>；秋叶用户迁移说明也在该页。参数释义 · <a href="/lora/params.html">训练参数说明</a> · <a href="/other/changelog.html">更新日志</a></p></div>"""
 
 # Guide body is built by scripts/patch-anima-fast-entry.py (pager layout).
 def guide_html_body() -> str:
@@ -58,7 +58,7 @@ def patch_index_js() -> None:
     text = text.replace('alt:"SD-Trainer"', 'alt:"Next Story Trainer"')
     text = text.replace(
         'E=s("p",null,"Stable Diffusion \\u8BAD\\u7EC3 UI v2.3.0",-1)',
-        'E=s("p",null,"lora-scripts-next \\u00b7 \\u4e0b\\u4e00\\u4ee3\\u8bad\\u7ec3 WebUI",-1)',
+        'E=s("p",null,"lora-scripts-story-next \\u00b7 \\u4e0b\\u4e00\\u4ee3\\u8bad\\u7ec3 WebUI",-1)',
     )
     start = text.find("h=r(`")
     end = text.find("`,10);function F")
@@ -82,10 +82,10 @@ def patch_index_ssr() -> None:
     )
     html = html.replace(
         "Stable Diffusion 训练 UI v2.3.0",
-        "lora-scripts-next · 下一代训练 WebUI",
+        "lora-scripts-story-next · 下一代训练 WebUI",
     )
     html = html.replace('alt="SD-Trainer"', 'alt="Next Story Trainer"')
-    start = html.find('<p align="center"><a href="https://github.com/wochenlong')
+    start = html.find('<div class="sd-home-hub">')
     if start < 0:
         start = html.find('<div class="sd-home')
     end = html.find("</div><!--[--><!--]--></div><footer class=\"page-meta\">")

@@ -69,11 +69,8 @@ class ContactAndI18nStaticTests(unittest.TestCase):
         )
         for kind in ("stars", "forks", "license"):
             self.assertIn(f"github/{kind}/{new}", changelog)
-        # Historical issue links remain on upstream.
-        self.assertIn(
-            "https://github.com/wochenlong/lora-scripts-next/issues/54",
-            changelog,
-        )
+        # Product UI must not deep-link historical upstream issues.
+        self.assertNotIn("wochenlong/lora-scripts-next", changelog)
 
     def test_next_page_mapping_does_not_collide_with_brand_name(self):
         nav = NAV_I18N.read_text(encoding="utf-8")
@@ -177,10 +174,12 @@ class ContactAndI18nStaticTests(unittest.TestCase):
             index[index.find("Author") : index.find("Author") + 800],
         )
         # Lead paragraph is split across text nodes; chrome must cover Chinese fragments.
+        self.assertNotIn("wochenlong", index)
+        self.assertNotIn("wochenlong", home_js)
         for key in (
-            "（Next Story Trainer）是 ",
-            "（上游 wochenlong/lora-scripts-next）的下游 Story 分支，源自秋叶 ",
-            "：主打 Anima DiT 训练与训练队列，在浏览器里配参数、一键开训。",
+            "是基于秋叶 ",
+            " 的下一代训练 WebUI：主打 Anima DiT 训练与训练队列，在浏览器里配参数、一键开训。",
+            "上游归属见「其他 → 关于」与 NOTICE。",
             "插件加速 · 进阶",
             "详细步骤见",
             "；秋叶用户迁移说明也在该页。参数释义 ·",
@@ -190,6 +189,7 @@ class ContactAndI18nStaticTests(unittest.TestCase):
                 re.search(r"[\u4e00-\u9fff]", chrome[key]),
                 f"Chinese left in EN value for {key!r}: {chrome[key]!r}",
             )
+        self.assertFalse(any("wochenlong" in k or "wochenlong" in str(v) for k, v in chrome.items()))
 
 
 if __name__ == "__main__":

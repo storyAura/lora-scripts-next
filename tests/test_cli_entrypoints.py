@@ -33,13 +33,18 @@ def test_legacy_train_sh_points_anima_users_to_dedicated_scripts():
 
 def test_readme_and_cli_docs_explain_anima_cli_entrypoints():
     readme = read("README.md")
+    readme_en = read("README.en.md")
     readme_zh = read("README-zh.md")
     cli_docs = read("docs/cli-args.md")
     anima_docs = read("docs/anima-training.md")
 
-    for content in (readme, readme_zh, cli_docs, anima_docs):
+    for content in (readme, readme_en, cli_docs, anima_docs):
         assert "train_anima_by_toml.sh" in content
         assert "train_anima_fast_by_toml.sh" in content
+    # README-zh.md is a redirect stub to the Chinese default README.md
+    assert "README.md" in readme_zh
+    assert "train_anima_by_toml.sh" in readme_zh
+    assert "train_anima_fast_by_toml.sh" in readme_zh
 
     assert "qwen3" in cli_docs
     assert "qwen3" in anima_docs
