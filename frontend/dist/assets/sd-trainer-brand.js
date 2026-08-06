@@ -1,7 +1,81 @@
 /**
  * Version chip next to the "Next Story Trainer" sidebar title (reads /api/version).
+ *
+ * Also heals older autosave / history snapshots where ``target_res`` was a
+ * comma-separated string into the checkbox multi-select array shape, before
+ * Vue restores localStorage into the form.
  */
 (function () {
+  (function healTargetResAutosave() {
+    try {
+      const allowed = { "512": 1, "768": 1, "896": 1, "1024": 1, "1280": 1, "1536": 1 };
+      function toTier(raw) {
+        if (Array.isArray(raw)) {
+          const out = [];
+          for (let i = 0; i < raw.length; i++) {
+            const item = String(raw[i] == null ? "" : raw[i]).trim();
+            if (allowed[item] && out.indexOf(item) < 0) out.push(item);
+          }
+          return out;
+        }
+        if (raw == null || raw === false) return [];
+        if (typeof raw === "number" && isFinite(raw)) {
+          const item = String(Math.trunc(raw));
+          return allowed[item] ? [item] : [];
+        }
+        const text = String(raw).trim();
+        if (!text) return [];
+        const out = [];
+        const parts = text.replace(/，/g, ",").split(",");
+        for (let i = 0; i < parts.length; i++) {
+          const item = parts[i].trim();
+          if (allowed[item] && out.indexOf(item) < 0) out.push(item);
+        }
+        return out;
+      }
+      function healObject(obj) {
+        if (!obj || typeof obj !== "object" || !("target_res" in obj)) return false;
+        const before = obj.target_res;
+        if (Array.isArray(before) && before.every(function (x) { return typeof x === "string"; })) {
+          return false;
+        }
+        obj.target_res = toTier(before);
+        return true;
+      }
+      function healStore(storage) {
+        if (!storage) return;
+        const keys = [];
+        for (let i = 0; i < storage.length; i++) {
+          const key = storage.key(i);
+          if (key && key.indexOf("configs-") === 0) keys.push(key);
+        }
+        for (let i = 0; i < keys.length; i++) {
+          const key = keys[i];
+          try {
+            const parsed = JSON.parse(storage.getItem(key) || "null");
+            let changed = false;
+            if (Array.isArray(parsed)) {
+              for (let j = 0; j < parsed.length; j++) {
+                const row = parsed[j];
+                const cfg = row && (row.config || row);
+                if (healObject(cfg)) changed = true;
+              }
+            } else if (healObject(parsed)) {
+              changed = true;
+            }
+            if (changed) storage.setItem(key, JSON.stringify(parsed));
+          } catch (e) {
+            /* ignore bad snapshots */
+          }
+        }
+      }
+      healStore(window.localStorage);
+      healStore(window.sessionStorage);
+    } catch (e) {
+      /* storage blocked */
+    }
+  })();
+
   const VERSION_URL = "/api/version";
   const CHIP_ID = "sd-brand-version-chip";
   const BRAND_TITLE = "Next Story Trainer";

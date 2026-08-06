@@ -110,6 +110,8 @@ class BaseDatasetParams:
     validation_split: float = 0.0
     resize_interpolation: Optional[str] = None
     skip_image_resolution: Optional[Tuple[int, int]] = None
+    multires_per_image: bool = False
+    target_res: Optional[str] = None
 
 @dataclass
 class DreamBoothDatasetParams(BaseDatasetParams):
@@ -246,6 +248,8 @@ class ConfigSanitizer:
         "resolution": functools.partial(__validate_and_convert_scalar_or_twodim.__func__, int),
         "network_multiplier": float,
         "resize_interpolation": str,
+        "multires_per_image": bool,
+        "target_res": Any(str, int, [int]),
         "skip_image_resolution": functools.partial(__validate_and_convert_scalar_or_twodim.__func__, int),
     }
 
@@ -261,6 +265,7 @@ class ConfigSanitizer:
         "face_crop_aug_range",
         "resolution",
         "skip_image_resolution",
+        "target_res",
     ]
     # prepare map because option name may differ among argparse and user config
     ARGPARSE_OPTNAME_TO_CONFIG_OPTNAME = {
@@ -538,7 +543,12 @@ def generate_dataset_group_by_blueprint(dataset_group_blueprint: DatasetGroupBlu
                   enable_bucket: {dataset.enable_bucket}
             """)
 
-            if dataset.enable_bucket:
+            if getattr(dataset, "multires_per_image", False):
+                info += indent(dedent(f"""\
+                  multires_per_image: True (ARB bucket settings are ignored)
+                  target_res: {list(dataset.multires_target_res or [])}
+                \n"""), "  ")
+            elif dataset.enable_bucket:
                 info += indent(dedent(f"""\
                   min_bucket_reso: {dataset.min_bucket_reso}
                   max_bucket_reso: {dataset.max_bucket_reso}

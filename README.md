@@ -30,7 +30,7 @@
 |------|--------|----------------|
 | **训练队列** | 侧栏「训练队列」：多任务入队、自动传送带、历史再训 / 编辑 | 以单次提交为主 |
 | **长驻稳定性** | 日志直播超长不断更、任务/日志有界、停止后杀净进程树再开训 | 偏基础任务生命周期 |
-| **Anima 算法面** | 标准 LoRA / LoKr / T-LoRA、T-GLoKR、Fast 插件路径、全量微调入口 | 能力随上游版本变化 |
+| **Anima 算法面** | 标准 LoRA / LoKr / T-LoRA、T-GLoKR、Fast 插件路径、全量微调入口；**多分辨率同时训练**（同 epoch 多档 free-fit） | 能力随上游版本变化 |
 | **界面与品牌** | Next Story Trainer 品牌、中英界面词表、本仓 Releases / 联系方式 | 上游品牌与发布渠道 |
 | **不收录** | 不维护上游的 **Anima Edit** 等实验分支入口 | 可能另有独立实验分支 |
 
@@ -80,9 +80,9 @@ bash install_flash_attn.sh
 
 | 模式 | 模型 / 脚本 | 说明 |
 |------|-------------|------|
-| **Anima LoRA** | LoRA · LoKr · **T-LoRA** | Flash Attention 2 / xformers / SDPA · 约 12GB 显存起 |
+| **Anima LoRA** | LoRA · LoKr · **T-LoRA** | Flash Attention 2 / xformers / SDPA · 约 12GB 显存起 · 可选 **多分辨率同时训练**（同 epoch 多档） |
 | **Anima LoRA Fast** | 仅 LoRA（进阶插件） | 可选 [anima_lora](https://github.com/sorryhyun/anima_lora) 运行时 · 建议 16GB+ · 见 [`docs/anima-fast.md`](docs/anima-fast.md) |
-| **Anima 全量微调** | 完整 DiT（`anima_train.py`） | 侧栏 **全量微调 → Anima Finetune** · **约 24GB 显存**（4090 档） |
+| **Anima 全量微调** | 完整 DiT（`anima_train.py`） | 侧栏 **全量微调 → Anima Finetune** · **约 24GB 显存**（4090 档） · 同样支持多分辨率同时训练 |
 | SD 1.5 / SDXL LoRA | LoRA · LoHa · LoKr | xformers / SDPA |
 | SD 1.5 / SDXL 全量微调 | Dreambooth / SDXL finetune | 侧栏 **全量微调 → Stable Diffusion** |
 | Flux | LoRA | xformers / SDPA |
@@ -122,6 +122,8 @@ bash install_flash_attn.sh
 **v2.9.2**：停止后再立刻开训时，旧训练进程树会杀干净后再启动下一场，避免「双训练」导致 Loss/Epoch 乱跳；监控页 Loss、学习率与参数绑定当前任务与 TensorBoard。
 
 **v2.9.3**：GSoKR BF16 合并路径修正；落地 Next Story Trainer 品牌素材；英文界面词表（Chrome / Schema / Help）与 Markdown 说明整块翻译；联系方式与 Github 指向本仓库；LoRA 训练页介绍对齐。
+
+**v2.9.4**：**多分辨率同时训练**（`multires_per_image`）——Anima LoRA / Finetune 可在同一 epoch 内按多个 free-fit 档位（如 `512,1024`）各训一次；样本数按档位成倍增加，请下调 epoch。说明见 [`docs/proposal/multires_per_image_migration.md`](docs/proposal/multires_per_image_migration.md)。
 
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png?v=20260806-nst" alt="训练监控仪表盘" width="920" />
@@ -267,6 +269,7 @@ powershell -ExecutionPolicy Bypass -File .\install-cn.ps1
 
 | 日期 | 版本 |
 |------|------|
+| 2026-08-06 | **v2.9.4** — **多分辨率同时训练**（`multires_per_image`）：同 epoch 多档 free-fit；预览正提示词按行出多图 · 见 [CHANGELOG.md](CHANGELOG.md)、[`docs/proposal/multires_per_image_migration.md`](docs/proposal/multires_per_image_migration.md) |
 | 2026-08-05 | **v2.9.3** — GSoKR BF16 合并修正；Next Story Trainer 品牌素材；英文 i18n（含 Schema Markdown 说明）；联系方式 / Github → 本仓库；LoRA 训练页介绍对齐 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-08-04 | **v2.9.2** — **严重**：停止后再开训可能双训练（旧进程未杀净）已修；监控页 Loss/学习率/参数与当前任务、TensorBoard 对齐 · 见 [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-27 | **v2.9.1** — 长驻稳定性：日志直播超 1.5 万行不断更、任务/日志历史有界、监控 TensorBoard 解析缓存；**T-GLoKR** 时间步门控算法、预览 Beta 调度器、lora_type 表单修复；中文界面水合后右侧训练控件保持完整翻译 · 见 [CHANGELOG.md](CHANGELOG.md) |

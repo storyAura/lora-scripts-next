@@ -5,6 +5,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from mikazuki.multires import (
+    format_target_res,
+    is_multires_enabled,
+    validate_target_res,
+)
 from mikazuki.training_validation import validate_training_configuration
 from mikazuki.optimizer_configuration import normalize_optimizer_configuration
 from mikazuki.utils.config_import import ANIMA_LORA_TYPE_BRANCH_CONSTS
@@ -41,6 +46,8 @@ SUPPORTED_FIELDS = {
     "min_bucket_reso",
     "max_bucket_reso",
     "bucket_reso_steps",
+    "multires_per_image",
+    "target_res",
     "output_dir",
     "output_name",
     "save_model_as",
@@ -350,6 +357,11 @@ LOKR_FULL_MATRIX_WARNING = (
     "disabling full_bf16/full_fp16 and setting scale_weight_norms=1 if the first "
     "epoch becomes unstable. The trainer keeps your parameters unchanged."
 )
+MULTIRES_ARB_OVERRIDDEN_WARNING = (
+    "multires_per_image=true: the ARB bucket parameters (enable_bucket / "
+    "min_bucket_reso / max_bucket_reso / bucket_reso_steps) are ignored — "
+    "bucket resolutions come from the target_res tiers."
+)
 LOKR_FULL_MATRIX_GUARD_WARNING = (
     "Anima LoKr full_matrix=true: scale_weight_norms was empty, so the UI's "
     "promised stability guardrail was auto-enabled (scale_weight_norms=1.0). "
@@ -405,6 +417,24 @@ def _normalize_network_args(values: Any) -> list[str]:
             ordered.append(normalized)
 
     return ordered
+
+
+def _normalize_multires_fields(source: dict[str, Any], warnings: list[str]) -> None:
+    """Stamp the tier list for sd-scripts, or drop the knobs when disabled.
+
+    ``target_res`` travels as a comma-separated string because the TOML is fed
+    to argparse: a list value would not survive a plain ``str`` option.
+    """
+    if not is_multires_enabled(source.get("multires_per_image")):
+        source.pop("multires_per_image", None)
+        source.pop("target_res", None)
+        return
+
+    tiers = validate_target_res(source.get("target_res"))
+    source["multires_per_image"] = True
+    source["target_res"] = format_target_res(tiers)
+    if source.get("enable_bucket"):
+        warnings.append(MULTIRES_ARB_OVERRIDDEN_WARNING)
 
 
 def _apply_lr_fallback(source: dict[str, Any]) -> None:
@@ -510,6 +540,7 @@ def adapt_anima_config(
     warnings = list(optimizer_config.warnings)
     model_train_type = "anima-finetune" if finetune else "anima-lora"
     validate_training_configuration(source, model_train_type)
+    _normalize_multires_fields(source, warnings)
 
     # removed T-GLoKR (time-gated GLoKR): stale fields from old autosaves/history
     # are dropped silently instead of leaking into the TOML as unknown keys

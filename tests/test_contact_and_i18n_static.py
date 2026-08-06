@@ -119,6 +119,46 @@ class ContactAndI18nStaticTests(unittest.TestCase):
             src = json.loads(SCHEMA_SRC.read_text(encoding="utf-8"))
             self.assertTrue(set(src).issubset(set(schema)))
 
+    def test_schema_i18n_english_values_are_unique_for_reverse_map(self):
+        # zh-CN applies EN_TO_ZH; colliding EN placeholders scramble field help
+        # (noise_offset showed resolution copy; pyramid noise fields shared discount text).
+        schema = json.loads(SCHEMA_DICT.read_text(encoding="utf-8"))
+        by_en = {}
+        for zh, en in schema.items():
+            by_en.setdefault(en, []).append(zh)
+        collisions = {en: zhs for en, zhs in by_en.items() if len(zhs) > 1}
+        self.assertEqual(
+            collisions,
+            {},
+            f"duplicate EN values break EN_TO_ZH: {list(collisions)[:5]!r}",
+        )
+        noise_offset = (
+            "在训练中添加噪声偏移来改良生成非常暗或者非常亮的图像，如果启用推荐为 0.1"
+        )
+        iterations = (
+            "多分辨率（金字塔）噪声迭代次数 推荐 6-10。无法与 noise_offset 一同启用"
+        )
+        discount = (
+            "多分辨率（金字塔）衰减率 推荐 0.3-0.8，须同时与上方参数 "
+            "multires_noise_iterations 一同启用"
+        )
+        resolution = "训练图片分辨率，宽x高。支持非正方形，但必须是 64 倍数。"
+        for key in (noise_offset, iterations, discount, resolution):
+            self.assertIn(key, schema)
+        self.assertIn("noise offset", schema[noise_offset].lower())
+        self.assertIn("iterations", schema[iterations].lower())
+        self.assertIn("discount", schema[discount].lower())
+        self.assertIn("width x height", schema[resolution].lower())
+        self.assertEqual(
+            len({schema[noise_offset], schema[iterations], schema[discount], schema[resolution]}),
+            4,
+        )
+
+    def test_nav_i18n_skips_non_unique_en_in_reverse_map(self):
+        nav = NAV_I18N.read_text(encoding="utf-8")
+        self.assertIn("enCounts[en] === 1", nav)
+        self.assertIn("enCounts", nav)
+
     def test_schema_markdown_descriptions_have_stripped_en_aliases(self):
         nav = NAV_I18N.read_text(encoding="utf-8")
         schema = json.loads(SCHEMA_DICT.read_text(encoding="utf-8"))

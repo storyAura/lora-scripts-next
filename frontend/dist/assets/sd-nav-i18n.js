@@ -204,9 +204,23 @@
       "Default", "Training", "Deploy", "System", "Idle", "Failed",
       "Done", "Queued", "Paused", "Running", "Editing", "Clear",
     ]);
+    // Many schema descriptions historically share one English placeholder.
+    // Including those in EN_TO_ZH makes zh-CN reverse-translate scramble
+    // field help (e.g. noise_offset showing resolution copy).
+    const enCounts = Object.create(null);
+    Object.values(ZH_TO_EN).forEach((en) => {
+      if (!en) return;
+      enCounts[en] = (enCounts[en] || 0) + 1;
+    });
     return Object.fromEntries(
       Object.entries(ZH_TO_EN)
-        .filter(([zh, en]) => en && en !== zh && !AMBIGUOUS_EN.has(en))
+        .filter(
+          ([zh, en]) =>
+            en &&
+            en !== zh &&
+            !AMBIGUOUS_EN.has(en) &&
+            enCounts[en] === 1
+        )
         .map(([zh, en]) => [en, zh])
     );
   }

@@ -238,6 +238,31 @@ optimizer_args = ["decouple=True", "weight_deca"]
         self.assertEqual(result["config"]["lycoris_algo"], "lokr")
         self.assertEqual(result["config"]["lokr_factor"], -1)
 
+    def test_target_res_string_hydrates_to_checkbox_array(self):
+        result = validate_config_import(
+            "sd3-lora",
+            {
+                "model_train_type": "anima-lora",
+                "qwen3": "qwen_3_06b_base.safetensors",
+                "multires_per_image": True,
+                "target_res": "512,1024，768",
+            },
+        )
+        self.assertEqual(result["result"], "ok")
+        self.assertEqual(result["config"]["target_res"], ["512", "1024", "768"])
+
+    def test_target_res_already_array_keeps_allowed_tiers(self):
+        result = validate_config_import(
+            "sd3-lora",
+            {
+                "model_train_type": "anima-lora",
+                "qwen3": "qwen_3_06b_base.safetensors",
+                "target_res": [512, "1024", "999", "1024"],
+            },
+        )
+        self.assertEqual(result["result"], "ok")
+        self.assertEqual(result["config"]["target_res"], ["512", "1024"])
+
 
 class AnimaLoraTypeBranchConstTests(unittest.TestCase):
     """History snapshots lack hidden union consts (network_module / lycoris_algo).

@@ -691,6 +691,44 @@ def _apply_anima_lora_type_consts(config: dict) -> None:
         config.update(consts)
 
 
+def _hydrate_target_res_for_ui(config: dict) -> None:
+    """Coerce imported ``target_res`` into the checkbox multi-select shape.
+
+    The form stores an array of tier strings (``["512","1024"]``). Older TOML /
+    history snapshots may still carry a comma-separated string or int list —
+    convert those so the page schema can match the field.
+    """
+    if "target_res" not in config:
+        return
+    raw = config.get("target_res")
+    allowed = {"512", "768", "896", "1024", "1280", "1536"}
+    if isinstance(raw, list):
+        tiers: list[str] = []
+        for item in raw:
+            text = str(item).strip()
+            if text in allowed and text not in tiers:
+                tiers.append(text)
+        config["target_res"] = tiers
+        return
+    if isinstance(raw, bool) or raw is None:
+        config["target_res"] = []
+        return
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        text = str(int(raw))
+        config["target_res"] = [text] if text in allowed else []
+        return
+    text = str(raw).strip()
+    if not text:
+        config["target_res"] = []
+        return
+    tiers = []
+    for part in text.replace("，", ",").split(","):
+        item = part.strip()
+        if item in allowed and item not in tiers:
+            tiers.append(item)
+    config["target_res"] = tiers
+
+
 def _finalize_import_config(config: dict) -> dict:
     """Apply cross-page normalizers for imported GUI configs."""
     normalized = copy.deepcopy(config)
@@ -699,6 +737,7 @@ def _finalize_import_config(config: dict) -> dict:
     _hydrate_lycoris_ui_fields_from_network_args(normalized)
     _hydrate_anima_ui_fields_from_network_args(normalized)
     _apply_anima_lora_type_consts(normalized)
+    _hydrate_target_res_for_ui(normalized)
     ensure_enable_preview_flag(normalized)
     return normalized
 

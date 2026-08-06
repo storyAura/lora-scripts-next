@@ -690,11 +690,22 @@ class BaseDataset(torch.utils.data.Dataset):
         debug_dataset: bool,
         resize_interpolation: Optional[str] = None,
         skip_image_resolution: Optional[Tuple[int, int]] = None,
+        multires_per_image: bool = False,
+        target_res: Optional[Any] = None,
     ) -> None:
         super().__init__()
 
         # width/height is used when enable_bucket==False
         self.width, self.height = (None, None) if resolution is None else resolution
+
+        # same-epoch multi-resolution expansion: every image is trained once per
+        # free-fit tier, so tier buckets replace ARB bucketing entirely
+        self.multires_per_image = bool(multires_per_image)
+        self.multires_target_res: Optional[Tuple[int, ...]] = None
+        if self.multires_per_image:
+            from library import anima_multires
+
+            self.multires_target_res = anima_multires.validate_target_res(target_res)
         self.network_multiplier = network_multiplier
         self.debug_dataset = debug_dataset
 
@@ -992,6 +1003,50 @@ class BaseDataset(torch.utils.data.Dataset):
         self.image_data[info.image_key] = info
         self.image_to_subset[info.image_key] = subset
 
+    def _prepare_multires_buckets(self, target_res: Tuple[int, ...]) -> List[float]:
+        """Expand each image across free-fit tiers and build the tier buckets.
+
+        Replaces ARB bucketing: tier buckets come from the image's native aspect
+        ratio at each ``target_res`` token band, so ``resolution`` /
+        ``min_bucket_reso`` / ``max_bucket_reso`` / ``bucket_reso_steps`` are not
+        consulted at all.
+        """
+        from library import anima_multires
+
+        source_count = len(self.image_data)
+        self.image_data, self.image_to_subset, ar_errors = anima_multires.expand_image_data(
+            self.image_data, self.image_to_subset, target_res
+        )
+
+        resos = anima_multires.bucket_resolutions(self.image_data)
+        self.bucket_manager = BucketManager(False, None, None, None, None)
+        self.bucket_manager.set_predefined_resos(resos)
+        for reso in resos:
+            self.bucket_manager.add_if_new_reso(reso)
+
+        # counters are reported by config_util / metadata; keep them consistent
+        # with the expanded epoch instead of the pre-expansion image count
+        if hasattr(self, "num_train_images"):
+            self.num_train_images = sum(
+                info.num_repeats for info in self.image_data.values() if not info.is_reg
+            )
+        if hasattr(self, "num_reg_images"):
+            self.num_reg_images = sum(
+                info.num_repeats for info in self.image_data.values() if info.is_reg
+            )
+
+        logger.info(
+            f"multires_per_image: {source_count} images x {len(target_res)} tiers"
+            f" -> {len(self.image_data)} samples per epoch"
+        )
+        if resos:
+            min_tokens, max_tokens, token_counts = anima_multires.derive_token_budget(resos)
+            logger.info(
+                f"multires token budget from real bucket shapes: [{min_tokens}, {max_tokens}]"
+                f" over {len(token_counts)} distinct token counts"
+            )
+        return ar_errors
+
     def make_buckets(self):
         """
         bucketingを行わない場合も呼び出し必須（ひとつだけbucketを作る）
@@ -1019,13 +1074,20 @@ class BaseDataset(torch.utils.data.Dataset):
         #     for future in futures:
         #         future.result()
 
-        if self.enable_bucket:
+        if self.multires_target_res:
+            logger.info(f"make multi-resolution buckets: target_res={list(self.multires_target_res)}")
+        elif self.enable_bucket:
             logger.info("make buckets")
         else:
             logger.info("prepare dataset")
 
+        img_ar_errors = []
+        report_buckets = self.enable_bucket or bool(self.multires_target_res)
+
         # bucketを作成し、画像をbucketに振り分ける
-        if self.enable_bucket:
+        if self.multires_target_res:
+            img_ar_errors = self._prepare_multires_buckets(self.multires_target_res)
+        elif self.enable_bucket:
             if self.bucket_manager is None:  # fine tuningの場合でmetadataに定義がある場合は、すでに初期化済み
                 self.bucket_manager = BucketManager(
                     self.bucket_no_upscale,
@@ -1064,7 +1126,7 @@ class BaseDataset(torch.utils.data.Dataset):
                 self.bucket_manager.add_image(image_info.bucket_reso, image_info.image_key)
 
         # bucket情報を表示、格納する
-        if self.enable_bucket:
+        if report_buckets:
             self.bucket_info = {"buckets": {}}
             logger.info("number of images (including repeats) / 各bucketの画像枚数（繰り返し回数を含む）")
             for i, (reso, bucket) in enumerate(zip(self.bucket_manager.resos, self.bucket_manager.buckets)):
@@ -1190,7 +1252,16 @@ class BaseDataset(torch.utils.data.Dataset):
 
                     # if the modulo of num_processes is not equal to process_index, skip caching
                     # this makes each process cache different latents
-                    if i % num_processes != process_index:
+                    if self.multires_per_image:
+                        # every tier of one image writes into the same npz file
+                        # (keys are resolution suffixed), so shard by source image
+                        # or two processes would read-modify-write it concurrently
+                        from library import anima_multires
+
+                        shard = anima_multires.shard_index(info.absolute_path, num_processes)
+                    else:
+                        shard = i % num_processes
+                    if shard != process_index:
                         continue
 
                     # print(f"{process_index}/{num_processes} {i}/{len(image_infos)} {info.latents_npz}")
@@ -1630,7 +1701,7 @@ class BaseDataset(torch.utils.data.Dataset):
                 )
                 im_h, im_w = img.shape[0:2]
 
-                if self.enable_bucket:
+                if self.enable_bucket or self.multires_per_image:
                     img, original_size, crop_ltrb = trim_and_resize_if_required(
                         subset.random_crop,
                         img,
@@ -1964,6 +2035,8 @@ class DreamBoothDataset(BaseDataset):
         validation_seed: Optional[int],
         resize_interpolation: Optional[str],
         skip_image_resolution: Optional[Tuple[int, int]] = None,
+        multires_per_image: bool = False,
+        target_res: Optional[Any] = None,
     ) -> None:
         super().__init__(
             resolution,
@@ -1972,6 +2045,8 @@ class DreamBoothDataset(BaseDataset):
             debug_dataset,
             resize_interpolation,
             skip_image_resolution,
+            multires_per_image,
+            target_res,
         )
 
         assert resolution is not None, f"resolution is required / resolution（解像度）指定は必須です"
@@ -2276,6 +2351,8 @@ class FineTuningDataset(BaseDataset):
         validation_split: float,
         resize_interpolation: Optional[str],
         skip_image_resolution: Optional[Tuple[int, int]] = None,
+        multires_per_image: bool = False,
+        target_res: Optional[Any] = None,
     ) -> None:
         super().__init__(
             resolution,
@@ -2284,6 +2361,8 @@ class FineTuningDataset(BaseDataset):
             debug_dataset,
             resize_interpolation,
             skip_image_resolution,
+            multires_per_image,
+            target_res,
         )
 
         self.batch_size = batch_size
@@ -2493,6 +2572,8 @@ class ControlNetDataset(BaseDataset):
         validation_seed: Optional[int],
         resize_interpolation: Optional[str] = None,
         skip_image_resolution: Optional[Tuple[int, int]] = None,
+        multires_per_image: bool = False,
+        target_res: Optional[Any] = None,
     ) -> None:
         super().__init__(
             resolution,
@@ -2501,6 +2582,8 @@ class ControlNetDataset(BaseDataset):
             debug_dataset,
             resize_interpolation,
             skip_image_resolution,
+            multires_per_image,
+            target_res,
         )
 
         db_subsets = []
@@ -2555,6 +2638,8 @@ class ControlNetDataset(BaseDataset):
             validation_seed,
             resize_interpolation,
             skip_image_resolution,
+            multires_per_image,
+            target_res,
         )
 
         # config_util等から参照される値をいれておく（若干微妙なのでなんとかしたい）
@@ -2614,6 +2699,8 @@ class ControlNetDataset(BaseDataset):
         self.dreambooth_dataset_delegate.make_buckets()
         self.bucket_manager = self.dreambooth_dataset_delegate.bucket_manager
         self.buckets_indices = self.dreambooth_dataset_delegate.buckets_indices
+        # multires expansion replaces the delegate's dict, so re-bind the alias
+        self.image_data = self.dreambooth_dataset_delegate.image_data
 
     def cache_latents(self, vae, vae_batch_size=1, cache_to_disk=False, is_main_process=True):
         return self.dreambooth_dataset_delegate.cache_latents(vae, vae_batch_size, cache_to_disk, is_main_process)
@@ -4606,6 +4693,19 @@ def add_dataset_arguments(
         action="store_true",
         help="cache meta information (caption and image size) for faster dataset loading. only available for DreamBooth"
         + " / メタ情報（キャプションとサイズ）をキャッシュしてデータセット読み込みを高速化する。DreamBooth方式のみ有効",
+    )
+    parser.add_argument(
+        "--multires_per_image",
+        action="store_true",
+        help="train every image once per target_res tier within the same epoch (Anima free-fit tiers)"
+        + " / 同一 epoch 内で各画像を target_res の各段階で1回ずつ学習する",
+    )
+    parser.add_argument(
+        "--target_res",
+        type=str,
+        default=None,
+        help="comma separated free-fit tiers for multires_per_image, e.g. 512,1024 (allowed: 512/768/896/1024/1280/1536)"
+        + " / multires_per_image 用の解像度段階（カンマ区切り）",
     )
     parser.add_argument(
         "--shuffle_caption", action="store_true", help="shuffle separated caption / 区切られたcaptionの各要素をshuffleする"

@@ -3,8 +3,17 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from mikazuki.multires import (
+    MultiresUnavailableError,
+    is_multires_enabled,
+    validate_target_res,
+)
+
 
 ANIMA_LORA_TRAIN_TYPES = frozenset({"anima-lora", "sd3-lora"})
+# Same-epoch multi-resolution expansion is implemented in the standard Anima
+# trainer only; the Fast backend has its own preprocess pipeline.
+MULTIRES_TRAIN_TYPES = frozenset({"anima-lora", "sd3-lora", "anima-finetune"})
 # Removed algorithms: a stale saved config must fail loudly instead of silently
 # training something else. "tglokr" (time-gated GLoKR) removed 2026-07-28;
 # "glokr" removed from the GUI 2026-07-29 (the vendored module remains for
@@ -308,6 +317,36 @@ def validate_training_configuration(
                 "fsdp2_frozen_base",
                 config.get("fsdp2_frozen_base"),
                 "currently supports standard LoRA only",
+            )
+
+    if is_multires_enabled(config.get("multires_per_image")):
+        if normalized_train_type not in MULTIRES_TRAIN_TYPES:
+            raise TrainingConfigurationError(
+                "multires_per_image",
+                config.get("multires_per_image"),
+                "same-epoch multi-resolution training is available on the standard "
+                "Anima trainer only",
+            )
+        try:
+            validate_target_res(config.get("target_res"))
+        except MultiresUnavailableError as error:
+            raise TrainingConfigurationError(
+                "multires_per_image",
+                config.get("multires_per_image"),
+                str(error),
+            ) from error
+        except ValueError as error:
+            raise TrainingConfigurationError(
+                "target_res",
+                config.get("target_res"),
+                str(error),
+            ) from error
+        if _is_truthy(config.get("random_crop")):
+            raise TrainingConfigurationError(
+                "random_crop",
+                config.get("random_crop"),
+                "random_crop makes per-tier latent caches non-reproducible; "
+                "disable it for multires_per_image",
             )
 
     if normalized_train_type not in ANIMA_LORA_TRAIN_TYPES:

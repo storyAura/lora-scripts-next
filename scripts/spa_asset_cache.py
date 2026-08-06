@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 # Bump this whenever frontend/dist assets are patched in place (same filename hash).
-SPA_ASSET_CACHE_KEY = "20260806-v2.9.3-no-upstream-ui"
+SPA_ASSET_CACHE_KEY = "20260806-v2.9.4-i18n-noise-fix"
 
 # Previous keys replaced by scripts/bump_spa_asset_cache_key.py when bumping.
 LEGACY_SPA_ASSET_CACHE_KEYS = (
+    "20260806-v2.9.4-target-res-multi",
+    "20260806-v2.9.4-multires-docs",
+    "20260806-v2.9.3-multires",
+    "20260806-v2.9.3-no-upstream-ui",
     "20260806-v2.9.3-repo-urls",
     "20260805-v2.9.3-lora-intro",
     "20260805-v2.9.3-schema-md",

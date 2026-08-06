@@ -1,0 +1,25 @@
+[project]
+name = "multires-training"
+version = "0.1.0"
+description = "Portable multi-resolution-per-image training helpers (free-fit tiers + sample expansion)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "numpy>=1.24",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["multires_training"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

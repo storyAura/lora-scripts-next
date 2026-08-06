@@ -3,6 +3,21 @@
 本文件记录 **storyAura/lora-scripts-story-next** 的发行说明（v2.9.0 及更早条目沿袭上游 wochenlong/lora-scripts-next）；kohya-ss/sd-scripts 的变更请见其仓库。
 
 ---
+## v2.9.4 — 2026-08-06
+
+### 多分辨率同时训练（`multires_per_image`）
+
+- **Anima LoRA / Finetune**：数据集设置新增「多分辨率同时训练」开关与档位列表 `target_res`（逗号分隔，至少 2 个；可选 `512 / 768 / 896 / 1024 / 1280 / 1536`）。
+- **行为**：同一 epoch 内，每张源图在选中的每个 free-fit 档位各训练一次（不是分阶段切换分辨率）；开启后经典 ARB 桶参数与单目标 `resolution` 不再决定训练尺寸，由档位列表接管。
+- **注意**：样本数按档位数成倍增加，请相应下调 epoch；与 UI 里的金字塔噪声 `multires_noise_*` 无关；Anima Fast 本期未接入。
+- **实现**：可移植逻辑在 `vendor/multires_training`；接入说明见 [`docs/proposal/multires_per_image_migration.md`](docs/proposal/multires_per_image_migration.md)。
+- **UI**：`target_res` 改为档位多选勾选框（默认勾选 512 + 1024），不再手填逗号列表。
+
+### 预览提示词
+
+- **多行正提示词**：`positive_prompts` 按行拆成多张预览图（不再被压成单行只出一张）；文本框带行号高亮。
+
+---
 ## v2.9.3 — 2026-08-05
 
 ### 训练正确性

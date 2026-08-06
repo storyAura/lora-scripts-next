@@ -30,7 +30,7 @@
 |------|-----------|------------------------|
 | **Training queue** | Sidebar queue: enqueue many jobs, auto conveyor, history retry / edit | Mostly one-shot submit |
 | **Long-run stability** | SSE logs past 15k lines, bounded task/log history, kill full process tree before next run | Basic task lifecycle |
-| **Anima surface** | LoRA / LoKr / T-LoRA, T-GLoKR, Fast plugin path, full finetune entry | Varies by upstream release |
+| **Anima surface** | LoRA / LoKr / T-LoRA, T-GLoKR, Fast plugin path, full finetune entry; **same-epoch multi-resolution training** (free-fit tiers) | Varies by upstream release |
 | **UI & identity** | Next Story Trainer branding, EN/ZH UI dictionaries, this repo’s Releases & contact | Upstream branding & release channel |
 | **Not shipped here** | No **Anima Edit** experimental branch entry | May host separate experiment branches |
 
@@ -80,9 +80,9 @@ CLI entrypoints: `train_anima_by_toml.sh` (standard Anima), `train_anima_fast_by
 
 | Mode | Model / script | Notes |
 |------|----------------|-------|
-| **Anima LoRA** | LoRA · LoKr · **T-LoRA** | Flash Attention 2 / xformers / SDPA · from ~12 GB VRAM |
+| **Anima LoRA** | LoRA · LoKr · **T-LoRA** | Flash Attention 2 / xformers / SDPA · from ~12 GB VRAM · optional **same-epoch multi-resolution** |
 | **Anima LoRA Fast** | LoRA only (plugin) | Optional [anima_lora](https://github.com/sorryhyun/anima_lora) runtime · ~16 GB+ · see [`docs/anima-fast.md`](docs/anima-fast.md) |
-| **Anima Finetune** | Full DiT (`anima_train.py`) | Sidebar **Full Finetune → Anima Finetune** · **~24 GB VRAM** (4090-class) |
+| **Anima Finetune** | Full DiT (`anima_train.py`) | Sidebar **Full Finetune → Anima Finetune** · **~24 GB VRAM** (4090-class) · also supports multi-resolution |
 | SD 1.5 / SDXL LoRA | LoRA · LoHa · LoKr | xformers / SDPA |
 | SD 1.5 / SDXL Finetune | Dreambooth / SDXL finetune | Sidebar **Full Finetune → Stable Diffusion** |
 | Flux | LoRA | xformers / SDPA |
@@ -122,6 +122,8 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 **v2.9.2:** stopping a run now waits until the full process tree is dead before the next job can start (fixes dual-training Loss/Epoch jumps); monitor Loss, LR, and params stay bound to the active task and TensorBoard.
 
 **v2.9.3:** GSoKR BF16 merge path fixed; Next Story Trainer brand assets landed; English UI dictionaries (Chrome / Schema / Help) with whole-block Markdown description translation; contact + GitHub point to this repo; LoRA training intro synced.
+
+**v2.9.4:** **Same-epoch multi-resolution training** (`multires_per_image`) — Anima LoRA / Finetune can train each image once per free-fit tier (e.g. `512,1024`) within one epoch; sample count scales with the number of tiers, so lower the epoch count. See [`docs/proposal/multires_per_image_migration.md`](docs/proposal/multires_per_image_migration.md).
 
 <p align="center">
   <img src="assets/readme/screenshot-train-monitor.png?v=20260806-nst" alt="Train Monitor Dashboard" width="920" />
@@ -176,6 +178,7 @@ Automatically opens a monitor page (port 6008) when training starts — GPU stat
 
 | Date | Version |
 |------|---------|
+| 2026-08-06 | **v2.9.4** — **same-epoch multi-resolution** (`multires_per_image`); multi-line preview prompts · see [CHANGELOG.md](CHANGELOG.md), [`docs/proposal/multires_per_image_migration.md`](docs/proposal/multires_per_image_migration.md) |
 | 2026-08-05 | **v2.9.3** — GSoKR BF16 merge fix; Next Story Trainer brand assets; English i18n; contact / GitHub → this repo · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-08-04 | **v2.9.2** — dual-training after stop fixed; monitor Loss / LR / params bound to active task · see [CHANGELOG.md](CHANGELOG.md) |
 | 2026-07-27 | **v2.9.1** — long-run stability; T-GLoKR; Beta preview scheduler · see [CHANGELOG.md](CHANGELOG.md) |

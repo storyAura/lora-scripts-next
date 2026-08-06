@@ -36,6 +36,8 @@ Schema.intersect([
             min_bucket_reso: Schema.number().default(256).description("arb 桶最小分辨率"),
             max_bucket_reso: Schema.number().default(2048).description("arb 桶最大分辨率"),
             bucket_reso_steps: Schema.number().default(64).description("arb 桶分辨率划分单位"),
+            multires_per_image: Schema.boolean().default(false).description("多分辨率同时训练：同一 epoch 内，每张图在下方每个档位各训练一次（不是分阶段切换分辨率）。开启后 arb 桶参数与上方 resolution 不再决定训练尺寸，由档位列表接管；数据量按档位数成倍增加，请相应下调 epoch"),
+            target_res: Schema.array(Schema.union(["512", "768", "896", "1024", "1280", "1536"])).role("checkbox").default(["512", "1024"]).description("多分辨率档位（可多选，至少勾选 2 个）。每档按原图宽高比自由适配（free-fit），latent 每档缓存一份。仅在上方开关开启时生效"),
         })
     ).description("数据集设置"),
 
