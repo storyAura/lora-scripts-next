@@ -238,34 +238,34 @@ def get_sample_prompts(config: dict, model_train_type: str = "sd-lora") -> Tuple
     default_seed = 42 if use_anima_defaults else 2333
     default_steps = 40 if use_anima_defaults else 24
 
-    positive_prompts = train_utils.normalize_sample_prompt_text(config.pop('positive_prompts', default_positive))
-    negative_prompts = train_utils.normalize_sample_prompt_text(config.pop('negative_prompts', default_negative))
-    sample_width = config.pop('sample_width', default_width)
-    sample_height = config.pop('sample_height', default_height)
-    sample_cfg = config.pop('sample_cfg', default_cfg)
-    sample_seed = config.pop('sample_seed', default_seed)
-    sample_steps = config.pop('sample_steps', default_steps)
-    sample_sampler = config.pop('sample_sampler', None)
-    sample_scheduler = config.pop('sample_scheduler', None)
-    randomly_choice_prompt = config.pop('randomly_choice_prompt', False)
+    positive_prompts = config.pop("positive_prompts", default_positive)
+    negative_prompts = config.pop("negative_prompts", default_negative)
+    sample_width = config.pop("sample_width", default_width)
+    sample_height = config.pop("sample_height", default_height)
+    sample_cfg = config.pop("sample_cfg", default_cfg)
+    sample_seed = config.pop("sample_seed", default_seed)
+    sample_steps = config.pop("sample_steps", default_steps)
+    sample_sampler = config.pop("sample_sampler", None)
+    sample_scheduler = config.pop("sample_scheduler", None)
+    randomly_choice_prompt = config.pop("randomly_choice_prompt", False)
 
     if randomly_choice_prompt:
         if len(sub_dir) != 1:
-            raise ValueError('训练数据集下有多个子文件夹，无法启用随机选取 Prompt 功能')
+            raise ValueError("训练数据集下有多个子文件夹，无法启用随机选取 Prompt 功能")
 
-        txt_files = glob(os.path.join(sub_dir[0], '*.txt'))
+        txt_files = glob(os.path.join(sub_dir[0], "*.txt"))
         if not txt_files:
-            raise ValueError('训练数据集路径没有 txt 文件')
+            raise ValueError("训练数据集路径没有 txt 文件")
         try:
             sample_prompt_file = random.choice(txt_files)
-            with open(sample_prompt_file, 'r', encoding='utf-8') as f:
-                positive_prompts = train_utils.normalize_sample_prompt_text(f.read())
+            with open(sample_prompt_file, "r", encoding="utf-8") as f:
+                positive_prompts = f.read()
         except IOError:
             log.error(f"读取 {sample_prompt_file} 文件失败")
 
-    sample_prompts_arg = train_utils.build_sample_prompt_line(
-        positive_prompts,
-        negative_prompts,
+    sample_prompts_arg = train_utils.build_sample_prompt_file_content(
+        positive_prompts if positive_prompts is not None else "",
+        negative_prompts if negative_prompts is not None else "",
         width=sample_width,
         height=sample_height,
         cfg=sample_cfg,
@@ -274,7 +274,9 @@ def get_sample_prompts(config: dict, model_train_type: str = "sd-lora") -> Tuple
         sampler=sample_sampler if use_anima_defaults else None,
         scheduler=sample_scheduler if use_anima_defaults else None,
     )
-    return positive_prompts, sample_prompts_arg
+    # Keep a readable positive blob for callers that only need presence / logging.
+    positive_joined = "\n".join(train_utils.split_sample_prompt_lines(positive_prompts))
+    return positive_joined or None, sample_prompts_arg
 
 
 TOKENIZER_CACHE_TRAIN_TYPES = frozenset(
@@ -756,7 +758,11 @@ async def submit_training_config(config: dict):
                 with open(sample_prompts_file, "w", encoding="utf-8", newline="\n") as f:
                     f.write(sample_prompts_arg + "\n")
                 config["sample_prompts"] = sample_prompts_file
-                log.info(f"Wrote prompts to file {sample_prompts_file}")
+                prompt_count = len(train_utils.split_sample_prompt_lines(positive_prompt))
+                log.info(
+                    f"Wrote prompts to file {sample_prompts_file} "
+                    f"({prompt_count} preview image(s), newline-separated)"
+                )
 
         except ValueError as e:
             log.error(f"Error while processing prompts: {e}")

@@ -67,7 +67,7 @@ Schema.intersect([
                 enable_preview: Schema.const(true).required(),
                 randomly_choice_prompt: Schema.boolean().default(false).description("随机选择预览图 Prompt；若训练集有多个子文件夹，则按文件夹名排序使用第一个子文件夹中的 .txt"),
                 prompt_file: Schema.string().role('textarea').description("预览 Prompt 文件路径；填写后优先于下方 positive/negative"),
-                positive_prompts: Schema.string().role('textarea').default("1girl, solo, smile, japanese clothes, kimono, blue eyes, closed mouth, upper body, looking at viewer, hair ornament, long hair, yellow kimono, black hair, anime coloring, yukata, choker, split mouth, side ponytail, bow, brown hair").description("预览 Prompt"),
+                positive_prompts: Schema.string().role('textarea').default("1girl, solo, smile, japanese clothes, kimono, blue eyes, closed mouth, upper body, looking at viewer, hair ornament, long hair, yellow kimono, black hair, anime coloring, yukata, choker, split mouth, side ponytail, bow, brown hair").description("预览 Prompt。每行一条 = 一张预览图（第1行 A、第2行 B…）"),
                 negative_prompts: Schema.string().role('textarea').default("nsfw, explicit, sexual content, nude, naked, nipples, areola, genitals, cleavage, breasts, ass, buttocks, thighs, underwear, lingerie, bikini, swimsuit, erotic, suggestive, lewd, spread legs, close-up body, transparent clothes, worst quality, low quality, score_1, score_2, score_3, artist name, jpeg artifacts").description("Negative Prompt"),
                 sample_width: Schema.number().default(1024).description("预览图宽"),
                 sample_height: Schema.number().default(1024).description("预览图高"),

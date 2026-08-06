@@ -168,11 +168,24 @@ def strip_disabled_preview_fields(config: dict) -> None:
         config.pop(key, None)
 
 
+def split_sample_prompt_lines(text: str | None) -> list[str]:
+    """Split preview positive prompts; one non-empty line = one sample image."""
+    if text is None:
+        return []
+    raw = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    for line in raw.split("\n"):
+        cleaned = re.sub(r"[ \t]+", " ", line).strip()
+        if cleaned and not cleaned.startswith("#"):
+            lines.append(cleaned)
+    return lines
+
+
 def normalize_sample_prompt_text(text: str) -> str:
-    """Collapse user-entered prompt fields to a single Kohya prompt line."""
+    """Collapse whitespace within a single Kohya prompt line (not across lines)."""
     if text is None:
         return ""
-    return re.sub(r"\s+", " ", str(text).replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ")).strip()
+    return re.sub(r"\s+", " ", str(text).replace("\r\n", "\n").replace("\r", "\n")).strip()
 
 
 def build_sample_prompt_line(
@@ -199,6 +212,42 @@ def build_sample_prompt_line(
         line += f" --sch {normalize_sample_prompt_text(scheduler)}"
     return line
 
+
+def build_sample_prompt_file_content(
+    positive: str,
+    negative: str,
+    *,
+    width: int = 512,
+    height: int = 512,
+    cfg: float = 7.0,
+    steps: int = 24,
+    seed: int = 2333,
+    sampler: str | None = None,
+    scheduler: str | None = None,
+) -> str:
+    """Build one or more Kohya sample-prompt lines (newline = another preview image)."""
+    positives = split_sample_prompt_lines(positive)
+    if not positives:
+        positives = [""]
+    try:
+        base_seed = int(seed)
+    except (TypeError, ValueError):
+        base_seed = 2333
+    lines = [
+        build_sample_prompt_line(
+            entry,
+            negative,
+            width=width,
+            height=height,
+            cfg=cfg,
+            steps=steps,
+            seed=base_seed + index,
+            sampler=sampler,
+            scheduler=scheduler,
+        )
+        for index, entry in enumerate(positives)
+    ]
+    return "\n".join(lines)
 
 def is_broken_multiline_sample_prompt(lines: list[str]) -> bool:
     if len(lines) < 2:

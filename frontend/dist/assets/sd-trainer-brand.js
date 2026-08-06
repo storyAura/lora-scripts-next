@@ -501,6 +501,207 @@
   }
 })();
 
+/** Multi-line positive_prompts: per-line highlighter backdrop (backend: one line = one image). */
+(function () {
+  if (window.__sdPromptLineHint) return;
+  window.__sdPromptLineHint = true;
+
+  var HINT_ID = "nst-prompt-line-hint";
+  var STYLE_ID = "nst-prompt-line-hint-style";
+  var WRAP_CLASS = "nst-plh-wrap";
+  var BACKDROP_CLASS = "nst-plh-backdrop";
+  var COLORS = [
+    { bg: "rgba(244, 180, 176, 0.55)" },
+    { bg: "rgba(242, 214, 120, 0.55)" },
+    { bg: "rgba(168, 216, 185, 0.55)" },
+    { bg: "rgba(195, 177, 225, 0.50)" },
+    { bg: "rgba(169, 200, 232, 0.55)" },
+    { bg: "rgba(224, 184, 138, 0.50)" },
+    { bg: "rgba(143, 211, 199, 0.50)" },
+    { bg: "rgba(231, 159, 196, 0.45)" },
+  ];
+
+  function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    var style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = [
+      "." + WRAP_CLASS + "{position:relative;width:100%;}",
+      "." + BACKDROP_CLASS + "{position:absolute;inset:0;margin:0;padding:inherit;border:0;overflow:hidden;pointer-events:none;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;color:transparent;background:transparent;z-index:0;}",
+      "." + BACKDROP_CLASS + " .nst-plh-line{-webkit-box-decoration-break:clone;box-decoration-break:clone;border-radius:3px;}",
+      "." + WRAP_CLASS + " textarea.nst-plh-ta{position:relative;z-index:1;background:transparent!important;caret-color:var(--c-text,#2d2411);}",
+    ].join("");
+    document.head.appendChild(style);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function findPositivePromptItem() {
+    var found = null;
+    document.querySelectorAll(".k-schema-item").forEach(function (item) {
+      if (found) return;
+      var left = item.querySelector(".k-schema-left");
+      if (!left) return;
+      var text = (left.textContent || "").replace(/\s+/g, " ");
+      if (text.indexOf("positive_prompts") === -1) return;
+      var ta = item.querySelector("textarea");
+      if (ta) found = { item: item, textarea: ta };
+    });
+    return found;
+  }
+
+  function promptLines(value) {
+    return String(value || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n");
+  }
+
+  function colorIndexForLogicalLine(lines, lineIndex) {
+    var logical = -1;
+    for (var i = 0; i <= lineIndex; i++) {
+      var t = (lines[i] || "").trim();
+      if (t && t.charAt(0) !== "#") logical += 1;
+    }
+    return logical < 0 ? 0 : logical;
+  }
+
+  function ensureWrap(ta) {
+    if (ta.parentElement && ta.parentElement.classList.contains(WRAP_CLASS)) {
+      return ta.parentElement;
+    }
+    var wrap = document.createElement("div");
+    wrap.className = WRAP_CLASS;
+    ta.parentNode.insertBefore(wrap, ta);
+    wrap.appendChild(ta);
+    ta.classList.add("nst-plh-ta");
+    var backdrop = document.createElement("pre");
+    backdrop.className = BACKDROP_CLASS;
+    backdrop.setAttribute("aria-hidden", "true");
+    wrap.insertBefore(backdrop, ta);
+    return wrap;
+  }
+
+  function syncBackdropMetrics(ta, backdrop) {
+    var cs = window.getComputedStyle(ta);
+    [
+      "fontFamily",
+      "fontSize",
+      "fontWeight",
+      "fontStyle",
+      "letterSpacing",
+      "lineHeight",
+      "paddingTop",
+      "paddingRight",
+      "paddingBottom",
+      "paddingLeft",
+      "borderTopWidth",
+      "borderRightWidth",
+      "borderBottomWidth",
+      "borderLeftWidth",
+      "boxSizing",
+      "textAlign",
+      "textTransform",
+      "wordSpacing",
+      "tabSize",
+    ].forEach(function (key) {
+      backdrop.style[key] = cs[key];
+    });
+    backdrop.style.borderStyle = "solid";
+    backdrop.style.borderColor = "transparent";
+    backdrop.style.width = ta.clientWidth + "px";
+    backdrop.style.height = ta.clientHeight + "px";
+  }
+
+  function renderBackdrop(ta) {
+    var wrap = ensureWrap(ta);
+    var backdrop = wrap.querySelector("." + BACKDROP_CLASS);
+    if (!backdrop) return;
+    syncBackdropMetrics(ta, backdrop);
+    var lines = promptLines(ta.value);
+    var html = "";
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var trimmed = raw.trim();
+      var isComment = trimmed.charAt(0) === "#";
+      var isEmpty = !trimmed;
+      var colorIdx = colorIndexForLogicalLine(lines, i);
+      var c = COLORS[colorIdx % COLORS.length];
+      var text = escapeHtml(raw) + (i < lines.length - 1 ? "\n" : "");
+      if (isEmpty || isComment) {
+        html += "<span>" + text + "</span>";
+      } else {
+        html +=
+          '<span class="nst-plh-line" style="background:' +
+          c.bg +
+          '">' +
+          text +
+          "</span>";
+      }
+    }
+    if (!html) html = " ";
+    backdrop.innerHTML = html;
+    backdrop.scrollTop = ta.scrollTop;
+    backdrop.scrollLeft = ta.scrollLeft;
+  }
+
+  function bindTextarea(ta) {
+    if (ta.dataset.nstPlhBound) return;
+    ta.dataset.nstPlhBound = "1";
+    ta.addEventListener("input", apply);
+    ta.addEventListener("change", apply);
+    ta.addEventListener("scroll", function () {
+      var wrap = ta.parentElement;
+      if (!wrap || !wrap.classList.contains(WRAP_CLASS)) return;
+      var backdrop = wrap.querySelector("." + BACKDROP_CLASS);
+      if (!backdrop) return;
+      backdrop.scrollTop = ta.scrollTop;
+      backdrop.scrollLeft = ta.scrollLeft;
+    });
+  }
+
+  function apply() {
+    injectStyle();
+    var hit = findPositivePromptItem();
+    if (!hit) return;
+    renderBackdrop(hit.textarea);
+    var right = hit.item.querySelector(".k-schema-right") || hit.item;
+    var legacy = right.querySelector("." + HINT_ID);
+    if (legacy) legacy.remove();
+    bindTextarea(hit.textarea);
+  }
+
+  var scheduled = false;
+  function schedule() {
+    if (scheduled) return;
+    scheduled = true;
+    window.requestAnimationFrame(function () {
+      scheduled = false;
+      apply();
+    });
+  }
+
+  function boot() {
+    var app = document.getElementById("app") || document.body;
+    new MutationObserver(schedule).observe(app, { childList: true, subtree: true });
+    document.addEventListener("input", schedule, true);
+    document.addEventListener("change", schedule, true);
+    window.addEventListener("resize", schedule);
+    schedule();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
+
 /** Training-queue loader - sd-trainer-queue.js is served no-cache like this file. */
 (function () {
   if (document.getElementById('sd-trainer-queue-script')) return;

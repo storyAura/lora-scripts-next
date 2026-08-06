@@ -325,7 +325,7 @@ Schema.intersect([
         Schema.union([
             Schema.object({
                 enable_preview: Schema.const(true).required(),
-                positive_prompts: Schema.string().role('textarea').default("1girl, solo, smile, japanese clothes, kimono, blue eyes, closed mouth, upper body, looking at viewer, hair ornament, long hair, yellow kimono, black hair, anime coloring, yukata, choker, split mouth, side ponytail, bow, brown hair").description("预览 Prompt。默认使用偏保守的人物半身预览；用户自定义后以后端实际提交值为准"),
+                positive_prompts: Schema.string().role('textarea').default("1girl, solo, smile, japanese clothes, kimono, blue eyes, closed mouth, upper body, looking at viewer, hair ornament, long hair, yellow kimono, black hair, anime coloring, yukata, choker, split mouth, side ponytail, bow, brown hair").description("预览 Prompt。每行一条 = 一张预览图（第1行 A、第2行 B…）。默认偏保守的人物半身；自定义后以后端提交值为准"),
                 negative_prompts: Schema.string().role('textarea').default("nsfw, explicit, sexual content, nude, naked, nipples, areola, genitals, cleavage, breasts, ass, buttocks, thighs, underwear, lingerie, bikini, swimsuit, erotic, suggestive, lewd, spread legs, close-up body, transparent clothes, worst quality, low quality, score_1, score_2, score_3, artist name, jpeg artifacts").description("Negative Prompt / 负面提示词。默认压制 NSFW、裸露和身体特写，适合公开预览页"),
                 sample_width: Schema.number().default(1024).description("预览图宽"),
                 sample_height: Schema.number().default(1024).description("预览图高"),

@@ -24,6 +24,33 @@ class SamplePromptNormalizationTests(unittest.TestCase):
         self.assertIn("--n nsfw, explicit", line)
         self.assertIn("@71style, 1boy silhouette", line)
 
+    def test_build_sample_prompt_file_content_keeps_multiline_prompts(self):
+        content = train_utils.build_sample_prompt_file_content(
+            "prompt one\nprompt two\n# ignored\n",
+            "bad quality",
+            width=832,
+            height=1024,
+            cfg=4,
+            steps=20,
+            seed=42,
+            sampler="euler",
+            scheduler="simple",
+        )
+        lines = content.split("\n")
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("prompt one "))
+        self.assertTrue(lines[1].startswith("prompt two "))
+        self.assertIn("--d 42", lines[0])
+        self.assertIn("--d 43", lines[1])
+        prompts = []
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as handle:
+            handle.write(content + "\n")
+            path = handle.name
+        prompts = load_prompts(path)
+        self.assertEqual(len(prompts), 2)
+        self.assertEqual(prompts[0]["prompt"], "prompt one")
+        self.assertEqual(prompts[1]["prompt"], "prompt two")
+
     def test_normalize_sample_prompt_file_content_merges_broken_multiline(self):
         content = (
             "@71style, 1boy silhouette, flying on a sword\n"

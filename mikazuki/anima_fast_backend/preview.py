@@ -7,7 +7,7 @@ import random
 
 from .adapter import AdapterError, int_value, is_empty
 from mikazuki.utils.train_utils import (
-    build_sample_prompt_line as build_kohya_sample_prompt_line,
+    build_sample_prompt_file_content,
     is_preview_enabled as shared_is_preview_enabled,
 )
 
@@ -73,7 +73,7 @@ def build_sample_prompt_line(config: dict) -> str:
     steps = config.get("sample_steps", 40)
     sampler = str(config.get("sample_sampler") or "euler").strip()
 
-    return build_kohya_sample_prompt_line(
+    return build_sample_prompt_file_content(
         positive,
         negative,
         width=width,

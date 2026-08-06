@@ -276,7 +276,7 @@
                     enable_preview: Schema.const(true).required(),
                     randomly_choice_prompt: Schema.boolean().default(false).description('随机选择预览图 Prompt'),
                     prompt_file: Schema.string().role('textarea').description('预览图 Prompt 文件路径。填写后将采用文件内的 prompt，而下方的选项将失效。'),
-                    positive_prompts: Schema.string().role('textarea').default('masterpiece, best quality, 1girl, solo').description("Prompt"),
+                    positive_prompts: Schema.string().role('textarea').default('masterpiece, best quality, 1girl, solo').description("Prompt。每行一条 = 一张预览图（第1行 A、第2行 B…）"),
                     negative_prompts: Schema.string().role('textarea').default('lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts,signature, watermark, username, blurry').description("Negative Prompt"),
                     sample_width: Schema.number().default(512).description('预览图宽'),
                     sample_height: Schema.number().default(512).description('预览图高'),
